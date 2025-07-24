@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter_beacon/flutter_beacon.dart';
+import 'package:permission_handler/permission_handler.dart'; // Import the new package
 
 // --- APP INITIALIZATION ---
 void main() {
@@ -21,15 +22,12 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.indigo,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      // The AuthCheck widget will show the correct page based on login status
       home: const AuthCheck(),
     );
   }
 }
 
 // --- AUTHENTICATION CHECKER WIDGET ---
-// This widget checks if a student ID is saved on the device.
-// If it is, it shows the HomePage. If not, it shows the LoginPage.
 class AuthCheck extends StatefulWidget {
   const AuthCheck({super.key});
 
@@ -49,13 +47,10 @@ class _AuthCheckState extends State<AuthCheck> {
       future: _getStudentId(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          // Show a loading circle while checking for saved data
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         } else if (snapshot.hasData && snapshot.data != null) {
-          // If a student ID is found, go to the HomePage
           return HomePage(studentId: snapshot.data!);
         } else {
-          // Otherwise, show the LoginPage
           return const LoginPage();
         }
       },
@@ -74,7 +69,6 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _studentIdController = TextEditingController();
 
-  // Saves the student ID and navigates to the HomePage
   Future<void> _login() async {
     if (_studentIdController.text.isNotEmpty) {
       final prefs = await SharedPreferences.getInstance();
@@ -115,7 +109,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-// --- HOME PAGE WIDGET (Handles Beacon Scanning) ---
+// --- HOME PAGE WIDGET (Handles Permissions and Beacon Scanning) ---
 class HomePage extends StatefulWidget {
   final String studentId;
   const HomePage({super.key, required this.studentId});
@@ -132,17 +126,30 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    // Start the beacon scanner as soon as the page loads
     _initializeBeaconScanner();
   }
 
-  // This function sets up and starts the beacon scanning
+  // --- NEW PERMISSION REQUEST FUNCTION ---
+  Future<void> _requestPermissions() async {
+    // Request multiple permissions at once
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.location,
+      Permission.bluetoothScan,
+      Permission.bluetoothConnect,
+    ].request();
+
+    // You can check individual statuses if needed
+    print('Location status: ${statuses[Permission.location]}');
+    print('Bluetooth Scan status: ${statuses[Permission.bluetoothScan]}');
+  }
+
   Future<void> _initializeBeaconScanner() async {
+    // Call the new permission request function first
+    await _requestPermissions();
+
     try {
-      // Check permissions and initialize the scanner
       await flutterBeacon.initializeAndCheckScanning;
 
-      // Define the region to scan for (must match your ESP32's UUID)
       final regions = <Region>[
         Region(
           identifier: 'MySchool',
@@ -150,16 +157,14 @@ class _HomePageState extends State<HomePage> {
         ),
       ];
 
-      // Start listening for beacons
       _streamRanging =
           flutterBeacon.ranging(regions).listen((RangingResult result) {
-        if (!mounted) return; // Check if the widget is still on screen
+        if (!mounted) return;
 
         if (result.beacons.isNotEmpty) {
           final beacon = result.beacons.first;
           final classId = beacon.minor.toString();
 
-          // Check if the beacon is close enough
           if (beacon.proximity == Proximity.near ||
               beacon.proximity == Proximity.immediate) {
             setState(() {
@@ -172,7 +177,6 @@ class _HomePageState extends State<HomePage> {
             });
           }
         } else {
-          // Update status if no beacons are found
           setState(() {
             _beaconStatus = 'Scanning for classroom beacon...';
           });
@@ -188,17 +192,13 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // Sends the check-in data to your backend server
   Future<void> _checkIn(String studentId, String classId) async {
-    // Prevents sending multiple requests at once
     if (_isCheckingIn) return;
     
     setState(() { _isCheckingIn = true; });
 
     try {
-      // IMPORTANT: Use your computer's local IP address here
-     // final url = Uri.parse('http://192.168.1.114:3000/api/check-in'); // Old
-      final url = Uri.parse('https://attendance-backend-omega.vercel.app/api/check-in'); // New
+      final url = Uri.parse('https://attendance-backend-omega.vercel.app/api/check-in');
 
       final response = await http.post(
         url,
@@ -210,7 +210,6 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           _beaconStatus = 'Check-in successful for Class $classId!';
         });
-        // Stop scanning after a successful check-in to save battery
         _streamRanging?.pause();
       } else {
          setState(() {
@@ -223,14 +222,12 @@ class _HomePageState extends State<HomePage> {
         _beaconStatus = 'Check-in failed. Cannot reach server.';
       });
     } finally {
-      // Allow for another check-in attempt after 30 seconds
       Timer(const Duration(seconds: 30), () {
         if (mounted) setState(() { _isCheckingIn = false; });
       });
     }
   }
   
-  // Clears student ID and returns to the LoginPage
   Future<void> _logout(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('student_id');
@@ -241,7 +238,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Clean up the beacon stream when the widget is removed
   @override
   void dispose() {
     _streamRanging?.cancel();
