@@ -46,7 +46,10 @@
     android:exported="false"
     android:label="Beacon"
     android:permission="TODO"
-    tools:replace="android:permission,android:label" />  
+    tools:replace="android:permission,android:label" />
+
+
+
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
