@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_beacon/flutter_beacon.dart';
 import '../services/attendance_service.dart';
 import '../widgets/beacon_status_widget.dart';
-import '../widgets/background_status_widget.dart';
 import '../../../core/services/beacon_service.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../auth/services/auth_service.dart';
@@ -188,6 +187,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Welcome, ${widget.studentId}'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -200,9 +201,6 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.all(AppConstants.defaultPadding),
         child: Column(
           children: [
-            // Background Status Widget
-            const BackgroundStatusWidget(),
-            const SizedBox(height: 16),
             Expanded(
               child: BeaconStatusWidget(
                 status: _beaconStatus,

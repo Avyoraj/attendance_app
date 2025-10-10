@@ -21,9 +21,10 @@ class BeaconStatusWidget extends StatelessWidget {
           // Status Icon
           _buildStatusIcon(),
           const SizedBox(height: 24),
-          
-          // Status Card
+          // Status Card (Material 3)
           Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Column(
@@ -32,38 +33,39 @@ class BeaconStatusWidget extends StatelessWidget {
                     'Attendance Status',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: Colors.indigo,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     status,
-                    style: const TextStyle(fontSize: 18),
+                    style: Theme.of(context).textTheme.titleMedium,
                     textAlign: TextAlign.center,
                   ),
                   if (isCheckingIn) ...[
                     const SizedBox(height: 16),
-                    const LinearProgressIndicator(),
+                    LinearProgressIndicator(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ],
                 ],
               ),
             ),
           ),
-          
           const SizedBox(height: 32),
-          
-          // Student Info Card
+          // Student Info Card (Material 3)
           Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  const Icon(Icons.person, color: Colors.indigo),
+                  Icon(Icons.person, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(width: 12),
                   Text(
                     'Student ID: $studentId',
-                    style: const TextStyle(
-                      fontSize: 16,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -71,26 +73,23 @@ class BeaconStatusWidget extends StatelessWidget {
               ),
             ),
           ),
-          
           const SizedBox(height: 24),
-          
-          // Instructions
+          // Instructions (Material 3 surface)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue.shade200),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
             ),
             child: Column(
               children: [
-                Icon(Icons.info, color: Colors.blue.shade600),
+                Icon(Icons.info, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(height: 8),
                 Text(
                   'Make sure Bluetooth is enabled and you are within range of the classroom beacon.',
-                  style: TextStyle(
-                    color: Colors.blue.shade800,
-                    fontSize: 14,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   textAlign: TextAlign.center,
                 ),

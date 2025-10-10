@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../widgets/login_form.dart';
-import '../../attendance/screens/home_screen.dart';
+import '../../../app/main_navigation.dart';
 import '../../../core/constants/app_constants.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -25,11 +25,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final success = await _authService.login(studentId);
-      
+
       if (success && mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => HomeScreen(studentId: studentId),
+            builder: (context) => MainNavigation(studentId: studentId),
           ),
         );
       } else {
@@ -56,6 +56,8 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Student Login'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
       body: Padding(
         padding: const EdgeInsets.all(AppConstants.defaultPadding),

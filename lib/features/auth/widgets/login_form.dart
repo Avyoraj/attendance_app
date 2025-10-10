@@ -44,13 +44,12 @@ class _LoginFormState extends State<LoginForm> {
             color: Colors.indigo,
           ),
           const SizedBox(height: 32),
-          const Text(
+          Text(
             'Welcome to Attendance App',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
               color: Colors.indigo,
+              fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 32),
@@ -60,6 +59,8 @@ class _LoginFormState extends State<LoginForm> {
             decoration: const InputDecoration(
               labelText: 'Enter Your Student ID',
               prefixIcon: Icon(Icons.person),
+              filled: true,
+              fillColor: Color(0xFFF5F5F5),
             ),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
@@ -70,7 +71,7 @@ class _LoginFormState extends State<LoginForm> {
             onFieldSubmitted: (_) => _handleSubmit(),
           ),
           const SizedBox(height: 24),
-          ElevatedButton(
+          FilledButton(
             onPressed: widget.isLoading ? null : _handleSubmit,
             child: widget.isLoading
                 ? const SizedBox(

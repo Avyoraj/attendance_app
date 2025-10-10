@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/storage_service.dart';
 import '../../auth/screens/login_screen.dart';
-import '../../attendance/screens/home_screen.dart';
+import '../../../app/main_navigation.dart';
 
 class AuthCheckScreen extends StatefulWidget {
   const AuthCheckScreen({super.key});
@@ -28,7 +28,7 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
             ),
           );
         } else if (snapshot.hasData && snapshot.data != null) {
-          return HomeScreen(studentId: snapshot.data!);
+          return MainNavigation(studentId: snapshot.data!);
         } else {
           return const LoginScreen();
         }

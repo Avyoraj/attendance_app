@@ -65,7 +65,7 @@ class BeaconService {
     
     // Very permissive - need only 2 readings (faster response)
     if (_rssiHistory.length < AppConstants.minimumReadingsForStability) {
-      return _rssiHistory.length >= 1; // Even 1 reading is acceptable
+      return _rssiHistory.isNotEmpty; // Even 1 reading is acceptable
     }
     
     // Calculate variance in signal strength - much more tolerant

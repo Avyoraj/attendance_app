@@ -3,30 +3,35 @@ import 'package:flutter/material.dart';
 class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
-      primarySwatch: Colors.indigo,
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.indigo,
+        brightness: Brightness.light,
+      ),
       visualDensity: VisualDensity.adaptivePlatformDensity,
-      
-      // AppBar Theme
+
       appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-        elevation: 2,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.indigo,
+        elevation: 0,
         centerTitle: true,
       ),
-      
-      // Elevated Button Theme
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.indigo,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+
+      filledButtonTheme: FilledButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStatePropertyAll(Colors.indigo),
+          foregroundColor: WidgetStatePropertyAll(Colors.white),
+          padding: WidgetStatePropertyAll(
+            const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         ),
       ),
-      
-      // Input Decoration Theme
+
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -37,10 +42,9 @@ class AppTheme {
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
-      
-      // Card Theme
+
       cardTheme: CardTheme(
-        elevation: 2,
+        elevation: 1,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -49,10 +53,14 @@ class AppTheme {
     );
   }
 
-  // You can add dark theme later if needed
   static ThemeData get darkTheme {
-    return ThemeData.dark().copyWith(
-      primaryColor: Colors.indigo,
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.indigo,
+        brightness: Brightness.dark,
+      ),
+      visualDensity: VisualDensity.adaptivePlatformDensity,
       // Add dark theme customizations here
     );
   }

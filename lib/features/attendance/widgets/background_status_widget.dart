@@ -14,6 +14,8 @@ class _BackgroundStatusWidgetState extends State<BackgroundStatusWidget> {
   @override
   Widget build(BuildContext context) {
     return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -23,7 +25,7 @@ class _BackgroundStatusWidgetState extends State<BackgroundStatusWidget> {
               children: [
                 Icon(
                   _isTracking ? Icons.notifications_active : Icons.notifications_off,
-                  color: _isTracking ? Colors.green : Colors.grey,
+                  color: _isTracking ? Theme.of(context).colorScheme.primary : Colors.grey,
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -36,6 +38,7 @@ class _BackgroundStatusWidgetState extends State<BackgroundStatusWidget> {
                 Switch(
                   value: _isTracking,
                   onChanged: _toggleTracking,
+                  activeColor: Theme.of(context).colorScheme.primary,
                 ),
               ],
             ),
@@ -53,20 +56,20 @@ class _BackgroundStatusWidgetState extends State<BackgroundStatusWidget> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                  border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.info_outline, size: 14, color: Colors.blue[700]),
+                    Icon(Icons.info_outline, size: 14, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 4),
                     Text(
                       'Check your notification panel for distance updates',
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.blue[700],
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ],

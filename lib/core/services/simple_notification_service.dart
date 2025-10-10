@@ -154,7 +154,7 @@ class SimpleNotificationService {
   static void _showNoBeaconNotification() {
     // Throttle "no beacon" notifications to every 30 seconds
     _notificationTimer?.cancel();
-    _notificationTimer = Timer(Duration(seconds: 30), () {
+    _notificationTimer = Timer(const Duration(seconds: 30), () {
       _showNotification('🔍 Scanning...', 'Looking for classroom beacons');
     });
   }
@@ -171,7 +171,7 @@ class SimpleNotificationService {
       if (response.statusCode == 200) {
         await _showNotification('✅ Success!', 'Attendance recorded for $classId');
         // Auto-dismiss notification after 5 seconds
-        Timer(Duration(seconds: 5), () {
+        Timer(const Duration(seconds: 5), () {
           _notifications?.cancel(1);
         });
       } else {
