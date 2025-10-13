@@ -1,15 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../core/services/simple_notification_service.dart';
 
-class BackgroundStatusWidget extends StatefulWidget {
+/// Shows that background attendance is always active
+class BackgroundStatusWidget extends StatelessWidget {
   const BackgroundStatusWidget({super.key});
-
-  @override
-  State<BackgroundStatusWidget> createState() => _BackgroundStatusWidgetState();
-}
-
-class _BackgroundStatusWidgetState extends State<BackgroundStatusWidget> {
-  bool _isTracking = false;
 
   @override
   Widget build(BuildContext context) {
@@ -24,89 +17,95 @@ class _BackgroundStatusWidgetState extends State<BackgroundStatusWidget> {
             Row(
               children: [
                 Icon(
-                  _isTracking ? Icons.notifications_active : Icons.notifications_off,
-                  color: _isTracking ? Theme.of(context).colorScheme.primary : Colors.grey,
+                  Icons.check_circle,
+                  color: Colors.green,
+                  size: 28,
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Background Tracking',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Auto-Attendance Active',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Always running in background',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const Spacer(),
-                Switch(
-                  value: _isTracking,
-                  onChanged: _toggleTracking,
-                  activeColor: Theme.of(context).colorScheme.primary,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.green, width: 1.5),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'LIVE',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              _isTracking 
-                ? '✅ Active • Monitoring beacon distance in background'
-                : '⏸️ Inactive • Enable for hands-free attendance',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey[600],
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
               ),
-            ),
-            if (_isTracking) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.info_outline, size: 14, color: Theme.of(context).colorScheme.primary),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Check your notification panel for distance updates',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Your attendance will be automatically logged when you enter a classroom with a beacon',
                       style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).colorScheme.primary,
+                        fontSize: 12,
+                        color: Colors.grey[700],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ],
         ),
       ),
     );
-  }
-
-  void _toggleTracking(bool value) async {
-    setState(() {
-      _isTracking = value;
-    });
-
-    if (value) {
-      await SimpleNotificationService.startBackgroundTracking();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🔍 Background tracking started • Check notifications'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    } else {
-      await SimpleNotificationService.stopBackgroundTracking();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⏸️ Background tracking stopped'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    }
   }
 }

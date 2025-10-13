@@ -19,10 +19,10 @@ class AppTheme {
 
       filledButtonTheme: FilledButtonThemeData(
         style: ButtonStyle(
-          backgroundColor: WidgetStatePropertyAll(Colors.indigo),
-          foregroundColor: WidgetStatePropertyAll(Colors.white),
-          padding: WidgetStatePropertyAll(
-            const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+          backgroundColor: const WidgetStatePropertyAll(Colors.indigo),
+          foregroundColor: const WidgetStatePropertyAll(Colors.white),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 32, vertical: 12),
           ),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(

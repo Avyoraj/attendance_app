@@ -3,6 +3,9 @@ import '../services/auth_service.dart';
 import '../widgets/login_form.dart';
 import '../../../app/main_navigation.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/continuous_beacon_service.dart';
+import '../../../core/services/logger_service.dart';
+import '../../../core/services/permission_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -27,6 +30,9 @@ class _LoginScreenState extends State<LoginScreen> {
       final success = await _authService.login(studentId);
 
       if (success && mounted) {
+        // Auto-start background attendance service after successful login
+        await _startBackgroundService();
+        
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) => MainNavigation(studentId: studentId),
@@ -42,6 +48,32 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  /// Auto-start background service after login
+  Future<void> _startBackgroundService() async {
+    try {
+      final logger = LoggerService();
+      
+      // Request all required permissions (BLE, Location, Notification)
+      final permissionService = PermissionService();
+      await permissionService.requestBeaconPermissions();
+      await permissionService.requestNotificationPermission();
+      logger.info('✓ Permissions requested');
+      
+      // Start continuous beacon scanning (works for lock screen)
+      final continuousService = ContinuousBeaconService();
+      await continuousService.startContinuousScanning();
+      logger.info('✅ Continuous scanning auto-started after login');
+      
+      // Show success message to user
+      if (mounted) {
+        _showSnackBar('✅ Auto-attendance enabled • Scanning continuously');
+      }
+    } catch (e) {
+      final logger = LoggerService();
+      logger.error('Failed to start continuous scanning', e);
     }
   }
 

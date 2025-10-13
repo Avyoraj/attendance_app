@@ -6,7 +6,7 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.3.1'
+        classpath 'com.android.tools.build:gradle:8.1.4'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
@@ -22,27 +22,7 @@ rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
-subprojects {
-    project.evaluationDependsOn(":app")
-}
 
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
-}
-
-// This is the new block you are adding at the end
-subprojects {
-    project.configurations.all {
-        resolutionStrategy.eachDependency { details ->
-            if (details.requested.group == 'androidx.core') {
-                details.useVersion "1.6.0"
-            }
-            if (details.requested.group == 'androidx.appcompat') {
-                details.useVersion "1.3.1"
-            }
-            if (details.requested.group == 'androidx.lifecycle') {
-                details.useVersion "2.3.1"
-            }
-        }
-    }
 }

@@ -42,6 +42,22 @@ dependencies:
   # Notifications only - simplified approach
   flutter_local_notifications: ^17.2.2
   provider: ^6.0.5
+  
+  # Background execution
+  workmanager: ^0.5.2
+  
+  # Connectivity and network
+  connectivity_plus: ^6.0.5
+  
+  # Local database for offline storage
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+  
+  # Logging
+  logger: ^2.4.0
+  
+  # Audio for alerts
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:

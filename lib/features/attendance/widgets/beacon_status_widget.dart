@@ -15,12 +15,13 @@ class BeaconStatusWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Status Icon
-          _buildStatusIcon(),
-          const SizedBox(height: 24),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Status Icon
+            _buildStatusIcon(),
+            const SizedBox(height: 24),
           // Status Card (Material 3)
           Card(
             elevation: 1,
@@ -97,6 +98,7 @@ class BeaconStatusWidget extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

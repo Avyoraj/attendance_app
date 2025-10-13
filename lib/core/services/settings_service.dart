@@ -1,4 +1,6 @@
 import '../../models/app_settings.dart';
+import 'background_attendance_service.dart';
+import 'alert_service.dart';
 
 class SettingsService {
   AppSettings _settings = AppSettings();
@@ -15,8 +17,24 @@ class SettingsService {
     // TODO: Persist change
   }
 
-  void toggleBackgroundTracking(bool value) {
+  void toggleBackgroundTracking(bool value) async {
     _settings.backgroundTracking = value;
+    
+    // Start or stop the actual background service
+    final backgroundService = BackgroundAttendanceService();
+    final alertService = AlertService();
+    
+    try {
+      if (value) {
+        await backgroundService.startBackgroundAttendance();
+        await alertService.showBackgroundServiceNotification();
+      } else {
+        await backgroundService.stopBackgroundAttendance();
+      }
+    } catch (e) {
+      print('Error toggling background tracking: $e');
+    }
+    
     // TODO: Persist change
   }
 
