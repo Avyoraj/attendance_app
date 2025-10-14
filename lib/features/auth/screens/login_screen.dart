@@ -27,10 +27,11 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final success = await _authService.login(studentId);
-
-      if (success && mounted) {
-        // Auto-start background attendance service after successful login
+      // Call new login method that returns detailed result
+      final loginResult = await _authService.login(studentId);
+      
+      if (loginResult['success'] == true && mounted) {
+        // Login successful - start background service and navigate
         await _startBackgroundService();
         
         Navigator.of(context).pushReplacement(
@@ -38,17 +39,54 @@ class _LoginScreenState extends State<LoginScreen> {
             builder: (context) => MainNavigation(studentId: studentId),
           ),
         );
-      } else {
-        _showSnackBar('Login failed. Please try again.');
+      } else if (mounted) {
+        // Login failed - show specific error message
+        final errorMessage = loginResult['message'] ?? 'Login failed';
+        final lockedStudent = loginResult['lockedToStudent'];
+        
+        if (lockedStudent != null) {
+          // Device is locked to another student
+          _showErrorDialog(
+            title: '🔒 Device Locked',
+            message: 'This device is already registered to Student ID: $lockedStudent\n\n'
+                'Each device can only be used by one student.\n\n'
+                'To use this device:\n'
+                '1. Contact your administrator\n'
+                '2. Ask them to reset device bindings\n'
+                '3. Or use a different device',
+          );
+        } else {
+          // General error
+          _showSnackBar(errorMessage);
+        }
       }
     } catch (e) {
-      _showSnackBar('An error occurred. Please try again.');
+      if (mounted) {
+        _showSnackBar('An error occurred. Please try again.');
+      }
       print('Login error: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  /// Show error dialog with detailed message
+  void _showErrorDialog({required String title, required String message}) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Auto-start background service after login
