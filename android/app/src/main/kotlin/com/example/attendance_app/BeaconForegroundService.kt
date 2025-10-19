@@ -23,14 +23,17 @@ class BeaconForegroundService : Service() {
         const val SUCCESS_NOTIFICATION_ID = 2000
         const val METHOD_CHANNEL = "com.example.attendance_app/beacon_service"
         
+        @Volatile // Ensure visibility across threads
         private var serviceInstance: BeaconForegroundService? = null
         
         fun updateNotification(text: String) {
             android.util.Log.d("BeaconService", "📢 updateNotification called (static), serviceInstance = $serviceInstance")
-            if (serviceInstance == null) {
-                android.util.Log.e("BeaconService", "❌ Service instance is NULL! Cannot update notification")
+            val instance = serviceInstance
+            if (instance == null) {
+                android.util.Log.w("BeaconService", "⚠️ Service not yet started - notification update skipped")
+                // Don't log as error - this is expected during initialization
             } else {
-                serviceInstance?.updateNotificationText(text)
+                instance.updateNotificationText(text)
             }
         }
         
@@ -86,30 +89,54 @@ class BeaconForegroundService : Service() {
         }
         
         fun startService(context: Context) {
+            android.util.Log.d("BeaconService", "🚀 startService() called")
             val intent = Intent(context, BeaconForegroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
                 context.startService(intent)
             }
+            android.util.Log.d("BeaconService", "✅ Service start requested")
         }
         
         fun stopService(context: Context) {
+            android.util.Log.d("BeaconService", "🛑 stopService() called")
             val intent = Intent(context, BeaconForegroundService::class.java)
             context.stopService(intent)
+            android.util.Log.d("BeaconService", "✅ Service stop requested")
+        }
+        
+        fun isServiceRunning(): Boolean {
+            return serviceInstance != null
         }
     }
     
     override fun onCreate() {
         super.onCreate()
-        android.util.Log.d("BeaconService", "📱 onCreate called")
+        android.util.Log.d("BeaconService", "📱 Service onCreate() called")
+        
+        // Set instance FIRST before any other initialization
         serviceInstance = this
-        android.util.Log.d("BeaconService", "✅ serviceInstance set: $serviceInstance")
+        android.util.Log.d("BeaconService", "✅ serviceInstance set to: $serviceInstance")
+        
+        // Initialize notification manager
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        
+        // Create notification channel (required for Android O+)
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, createNotification())
+        
+        // Start foreground immediately (required within 5 seconds of service start)
+        try {
+            startForeground(NOTIFICATION_ID, createNotification())
+            android.util.Log.d("BeaconService", "✅ Service started in foreground")
+        } catch (e: Exception) {
+            android.util.Log.e("BeaconService", "❌ Failed to start foreground service", e)
+        }
+        
+        // Acquire wake lock to keep CPU running
         acquireWakeLock()
-        android.util.Log.d("BeaconService", "✅ Service fully initialized")
+        
+        android.util.Log.d("BeaconService", "✅ Service fully initialized and running")
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -143,9 +170,16 @@ class BeaconForegroundService : Service() {
     }
     
     override fun onDestroy() {
-        super.onDestroy()
-        serviceInstance = null
+        android.util.Log.d("BeaconService", "🛑 Service onDestroy() called")
+        
+        // Release wake lock first
         releaseWakeLock()
+        
+        // Clear instance last
+        serviceInstance = null
+        android.util.Log.d("BeaconService", "✅ Service destroyed, instance cleared")
+        
+        super.onDestroy()
     }
     
     private fun acquireWakeLock() {

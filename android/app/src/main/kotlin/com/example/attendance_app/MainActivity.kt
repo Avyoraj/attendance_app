@@ -31,7 +31,19 @@ class MainActivity: FlutterActivity() {
                 "updateNotification" -> {
                     val text = call.argument<String>("text") ?: "Scanning..."
                     android.util.Log.d("MainActivity", "📢 updateNotification called with text: $text")
-                    BeaconForegroundService.updateNotification(text)
+                    
+                    // Ensure service is running before updating notification
+                    if (!BeaconForegroundService.isServiceRunning()) {
+                        android.util.Log.w("MainActivity", "⚠️ Service not running, starting it first...")
+                        BeaconForegroundService.startService(this)
+                        // Wait a moment for service to initialize
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            BeaconForegroundService.updateNotification(text)
+                        }, 500)
+                    } else {
+                        BeaconForegroundService.updateNotification(text)
+                    }
+                    
                     android.util.Log.d("MainActivity", "✅ updateNotification completed")
                     result.success(true)
                 }
