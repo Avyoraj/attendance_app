@@ -194,6 +194,19 @@ class _HomeScreenState extends State<HomeScreen> {
             _showSnackBar('✅ You\'re already checked in. Enjoy your class!');
             print('⏳ Cooldown state - already checked in for $studentId in $classId');
             break;
+          
+          case 'cancelled':
+            // 🚨 NEW: Attendance cancelled because student left during waiting period
+            setState(() {
+              _beaconStatus = '❌ Attendance Cancelled!\nYou left the classroom during the confirmation period.\n\nStay in class for the full ${AppConstants.secondCheckDelay.inSeconds} seconds next time.';
+              _isAwaitingConfirmation = false;
+              _confirmationTimer?.cancel();
+              _remainingSeconds = 0;
+              _isCheckingIn = false;
+            });
+            _showSnackBar('❌ Attendance cancelled - you left the classroom too early!');
+            print('🚫 Attendance cancelled for $studentId in $classId (left during waiting period)');
+            break;
             
           case 'device_mismatch':
             setState(() {
@@ -232,9 +245,35 @@ class _HomeScreenState extends State<HomeScreen> {
         (RangingResult result) async {
           if (!mounted) return;
           
-          // CRITICAL: DON'T update status during confirmation period
+          // 🎯 CRITICAL FIX: Still process beacon data during confirmation wait
+          // to keep beacon service buffer alive, but don't trigger new check-ins
+          if (result.beacons.isNotEmpty) {
+            final beacon = result.beacons.first;
+            final classId = _beaconService.getClassIdFromBeacon(beacon);
+            final rssi = beacon.rssi;
+            final distance = _calculateDistance(rssi, beacon.txPower ?? -59);
+            
+            // NEW: Track when beacon was last seen (for exit detection)
+            _lastBeaconSeen = DateTime.now();
+            
+            // 🎯 ALWAYS feed RSSI to beacon service (even during confirmation wait)
+            // This keeps the smoothing buffer alive for the final confirmation check
+            _beaconService.feedRssiSample(rssi);
+            
+            // 🔥 UPDATE NOTIFICATION with beacon status
+            try {
+              await platform.invokeMethod('updateNotification', {
+                'text': '📍 Found $classId | RSSI: $rssi | ${distance.toStringAsFixed(1)}m'
+              });
+              print('📲 Notification updated: $classId at ${distance.toStringAsFixed(1)}m');
+            } catch (e) {
+              print('⚠️ Failed to update notification: $e');
+            }
+          }
+          
+          // CRITICAL: DON'T update status or trigger check-ins during confirmation period
           if (_isAwaitingConfirmation) {
-            // Completely block all status updates during confirmation
+            // Still processing beacon data above, but block UI updates
             print('🔒 Ranging blocked: Awaiting confirmation ($_remainingSeconds seconds remaining)');
             return;
           }
@@ -252,34 +291,10 @@ class _HomeScreenState extends State<HomeScreen> {
             return;
           }
 
+          // Process beacon for check-in logic (beacon data already captured above)
           if (result.beacons.isNotEmpty) {
             final beacon = result.beacons.first;
             final classId = _beaconService.getClassIdFromBeacon(beacon);
-            final rssi = beacon.rssi;
-            final distance = _calculateDistance(rssi, beacon.txPower ?? -59);
-            
-            // NEW: Track when beacon was last seen (for exit detection)
-            _lastBeaconSeen = DateTime.now();
-            
-            // 🔥 UPDATE NOTIFICATION with beacon status
-            try {
-              await platform.invokeMethod('updateNotification', {
-                'text': '📍 Found $classId | RSSI: $rssi | ${distance.toStringAsFixed(1)}m'
-              });
-              print('📲 Notification updated: $classId at ${distance.toStringAsFixed(1)}m');
-            } catch (e) {
-              print('⚠️ Failed to update notification: $e');
-            }
-            
-            // DON'T analyze beacon if already checked in successfully
-            if (_isAwaitingConfirmation || 
-                _beaconStatus.contains('Check-in recorded') ||
-                _beaconStatus.contains('CONFIRMED') ||
-                _beaconStatus.contains('Attendance Recorded') ||  // Protect after confirmation
-                _beaconStatus.contains('Already Checked In')) {   // Protect during cooldown
-              print('🔒 Skipping beacon analysis - already checked in');
-              return;
-            }
             
             // Use advanced beacon analysis
             final shouldCheckIn = _beaconService.analyzeBeacon(beacon, widget.studentId, classId);
@@ -419,13 +434,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
   
   void _startConfirmationTimer() {
-    // Use 30 seconds for testing (production would be 10 minutes = 600 seconds)
+    // Use constant from app_constants (currently 60 seconds for testing)
     setState(() {
-      _remainingSeconds = 30; // AppConstants.secondCheckDelay.inSeconds for production
+      _remainingSeconds = AppConstants.secondCheckDelay.inSeconds; // ✅ Use constant
       _isAwaitingConfirmation = true;
     });
     
-    print('🔍 TIMER DEBUG: Started - remaining=$_remainingSeconds, awaiting=$_isAwaitingConfirmation');
+    print('🔍 TIMER DEBUG: Started - remaining=$_remainingSeconds seconds, awaiting=$_isAwaitingConfirmation');
     
     _confirmationTimer?.cancel();
     _confirmationTimer = Timer.periodic(

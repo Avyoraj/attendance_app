@@ -160,12 +160,18 @@ class RSSIStreamService {
     final rssi = beaconService.getCurrentRssi();
     
     if (rssi != null) {
+      // 🎯 CRITICAL FIX: Feed the RSSI back to keep beacon service buffer alive
+      // During confirmation wait, beacon ranging is blocked, so buffer would expire
+      // By feeding captured RSSI back, we maintain fresh samples for confirmation check
+      beaconService.feedRssiSample(rssi);
       return rssi;
     }
     
-    // Fallback if no beacon detected
+    // Fallback if no beacon detected - still feed it to maintain buffer
     _logger.w('⚠️ No beacon RSSI available, using default');
-    return -70;
+    final fallbackRssi = -70;
+    beaconService.feedRssiSample(fallbackRssi);
+    return fallbackRssi;
   }
 
   /// Calculate distance from RSSI using path loss model

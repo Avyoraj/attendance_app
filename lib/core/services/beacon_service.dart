@@ -33,6 +33,15 @@ class BeaconService {
   Timer? _provisionalTimer;
   Timer? _confirmationTimer;
   
+  // 🎯 NEW: RSSI Smoothing buffer (for noise reduction)
+  final List<int> _rssiSmoothingBuffer = [];
+  final List<DateTime> _rssiSmoothingTimestamps = [];
+  
+  // 🎯 NEW: Exit Hysteresis tracking (prevents false cancellations)
+  DateTime? _weakSignalStartTime;
+  bool _isInGracePeriod = false;
+  int? _lastKnownGoodRssi; // Cache last valid smoothed RSSI for grace period
+  
   // Attendance state tracking
   String _currentAttendanceState = 'scanning'; // scanning, provisional, confirmed, failed
   Function(String, String, String)? _onAttendanceStateChanged;
@@ -311,28 +320,155 @@ class BeaconService {
   /// Handle confirmation failure from AttendanceConfirmationService  
   void _handleConfirmationFailure(String studentId, String classId) {
     _logger.e('❌ Attendance confirmation failed for $studentId in $classId');
+    _logger.e('   Reason: Student left classroom during waiting period (out of beacon range)');
     
-    // Change state to failed
-    _currentAttendanceState = 'failed';
+    // Change state to 'cancelled' (different from 'failed')
+    _currentAttendanceState = 'cancelled';
     
-    // Notify UI
+    // Notify UI with 'cancelled' state
     if (_onAttendanceStateChanged != null) {
-      _onAttendanceStateChanged!(
-        studentId,
-        classId,
-        '❌ Check-in failed. Please try again.'
-      );
+      _onAttendanceStateChanged!('cancelled', studentId, classId);
     }
     
-    // Reset after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
+    // Reset after 5 seconds
+    Future.delayed(const Duration(seconds: 5), () {
       _resetAttendanceState();
     });
   }
   
   /// Get current RSSI value (for RSSI streaming service)
+  /// ✅ ENHANCED: Returns smoothed RSSI with exit hysteresis (prevents false cancellations)
   int? getCurrentRssi() {
-    return _currentRssi;
+    final now = DateTime.now();
+    
+    // 1. Check if we have any RSSI data
+    if (_rssiSmoothingBuffer.isEmpty) {
+      _logger.w('⚠️ No beacon data available');
+      return null;
+    }
+    
+    // 2. Calculate time since last RSSI sample (use most recent sample timestamp)
+    // This is MORE reliable than _lastBeaconTimestamp because samples are added
+    // even when analyzeBeacon() isn't called (beacon detection is intermittent)
+    final mostRecentSampleTime = _rssiSmoothingTimestamps.isNotEmpty 
+        ? _rssiSmoothingTimestamps.last 
+        : null;
+    
+    if (mostRecentSampleTime == null) {
+      _logger.w('⚠️ No recent RSSI samples available');
+      return null;
+    }
+    
+    final timeSinceLastBeacon = now.difference(mostRecentSampleTime);
+    
+    // 3. EXIT HYSTERESIS LOGIC (prevents false cancellations from body movement)
+    if (timeSinceLastBeacon > AppConstants.beaconLostTimeout) {
+      // Beacon not seen for 45+ seconds - might be temporary (body blocking signal)
+      
+      if (_weakSignalStartTime == null) {
+        // First time detecting weak signal - START grace period
+        _weakSignalStartTime = now;
+        _isInGracePeriod = true;
+        _logger.w('⚠️ Beacon weak for ${timeSinceLastBeacon.inSeconds}s - Starting ${AppConstants.exitGracePeriod.inSeconds}s grace period');
+        _logger.w('   Reason: Could be body movement/phone rotation - not cancelling yet');
+        
+        // Return last known good RSSI (don't call _getSmoothedRssi as it clears old samples)
+        return _lastKnownGoodRssi ?? _currentRssi;
+      }
+      
+      // Calculate how long we've been in weak signal state
+      final weakDuration = now.difference(_weakSignalStartTime!);
+      
+      if (weakDuration <= AppConstants.exitGracePeriod) {
+        // Still within grace period - DON'T cancel attendance
+        final remainingSeconds = AppConstants.exitGracePeriod.inSeconds - weakDuration.inSeconds;
+        _logger.w('⏳ Grace period active: ${remainingSeconds}s remaining (weak for ${weakDuration.inSeconds}s)');
+        
+        // Return last known good RSSI (cached before grace period started)
+        return _lastKnownGoodRssi ?? _currentRssi;
+      } else {
+        // Grace period expired - student ACTUALLY left
+        _logger.e('❌ Beacon lost for ${weakDuration.inSeconds}s (grace period: ${AppConstants.exitGracePeriod.inSeconds}s)');
+        _logger.e('   Student has left the classroom - clearing RSSI');
+        
+        // Clear stale data
+        _currentRssi = null;
+        _rssiSmoothingBuffer.clear();
+        _rssiSmoothingTimestamps.clear();
+        _weakSignalStartTime = null;
+        _isInGracePeriod = false;
+        _lastKnownGoodRssi = null;
+        
+        return null; // Truly lost - cancel attendance
+      }
+    }
+    
+    // 4. Signal is GOOD - reset grace period tracking
+    if (_weakSignalStartTime != null) {
+      _logger.i('✅ Beacon signal restored (was weak for ${now.difference(_weakSignalStartTime!).inSeconds}s)');
+      _weakSignalStartTime = null;
+      _isInGracePeriod = false;
+    }
+    
+    // 5. Return smoothed RSSI (reduces noise)
+    final smoothedRssi = _getSmoothedRssi();
+    if (smoothedRssi != null) {
+      _lastKnownGoodRssi = smoothedRssi; // Cache for grace period use
+    }
+    return smoothedRssi;
+  }
+  
+  /// 🎯 NEW: Get smoothed RSSI using moving average (reduces noise from body movement)
+  int? _getSmoothedRssi() {
+    if (_rssiSmoothingBuffer.isEmpty) return _currentRssi;
+    
+    // Clean old samples (older than 10 seconds)
+    final now = DateTime.now();
+    final cutoff = now.subtract(AppConstants.rssiSampleMaxAge);
+    
+    while (_rssiSmoothingTimestamps.isNotEmpty && 
+           _rssiSmoothingTimestamps.first.isBefore(cutoff)) {
+      _rssiSmoothingBuffer.removeAt(0);
+      _rssiSmoothingTimestamps.removeAt(0);
+    }
+    
+    if (_rssiSmoothingBuffer.isEmpty) return _currentRssi;
+    
+    // Calculate moving average of recent samples
+    final windowSize = _rssiSmoothingBuffer.length < AppConstants.rssiSmoothingWindow
+        ? _rssiSmoothingBuffer.length
+        : AppConstants.rssiSmoothingWindow;
+    
+    final recentSamples = _rssiSmoothingBuffer.sublist(
+      _rssiSmoothingBuffer.length - windowSize
+    );
+    
+    final smoothedRssi = recentSamples.reduce((a, b) => a + b) ~/ windowSize;
+    
+    _logger.d('📊 RSSI Smoothing: Raw=${_currentRssi}, Smoothed=$smoothedRssi (avg of $windowSize samples)');
+    
+    return smoothedRssi;
+  }
+  
+  /// 🎯 NEW: Add RSSI sample to smoothing buffer
+  void _addRssiSample(int rssi) {
+    _rssiSmoothingBuffer.add(rssi);
+    _rssiSmoothingTimestamps.add(DateTime.now());
+    
+    // Keep buffer size manageable (2x window size)
+    final maxBufferSize = AppConstants.rssiSmoothingWindow * 2;
+    if (_rssiSmoothingBuffer.length > maxBufferSize) {
+      _rssiSmoothingBuffer.removeAt(0);
+      _rssiSmoothingTimestamps.removeAt(0);
+    }
+  }
+  
+  /// 🎯 PUBLIC: Allow external services to feed RSSI samples (like RSSIStreamService)
+  /// This prevents buffer expiry during confirmation wait when ranging is blocked
+  void feedRssiSample(int rssi) {
+    _currentRssi = rssi;
+    _addRssiSample(rssi);
+    _logger.d('📥 External RSSI sample fed: $rssi dBm (Buffer: ${_rssiSmoothingBuffer.length})');
   }
 
   // Enhanced beacon detection with all advanced features
@@ -341,6 +477,15 @@ class BeaconService {
     
     // Store current RSSI for streaming
     _currentRssi = rssi;
+    
+    // 🎯 NEW: Add RSSI sample to smoothing buffer (reduces noise)
+    // This also updates _rssiSmoothingTimestamps which getCurrentRssi() uses
+    _addRssiSample(rssi);
+    
+    // Get smoothed RSSI for more stable decision-making
+    final smoothedRssi = _getSmoothedRssi() ?? rssi;
+    
+    _logger.d('🔍 Beacon Analysis: Raw=$rssi, Smoothed=$smoothedRssi, State=$_currentAttendanceState');
     
     // DON'T RESET if we're in confirmed state (let the 5-second delay handle it)
     if (_currentAttendanceState == 'confirmed') {
@@ -355,8 +500,18 @@ class BeaconService {
       return true; // Already processed, cooldown active
     }
     
-    // Basic range check (only reset if NOT confirmed)
-    if (rssi <= AppConstants.rssiThreshold) {
+    // 🎯 ENHANCED: Use dual-threshold system
+    // - Stricter threshold for CHECK-IN (must be close)
+    // - Lenient threshold for CONFIRMATION (can move around slightly)
+    final thresholdToUse = _currentAttendanceState == 'scanning'
+        ? AppConstants.checkInRssiThreshold  // -75 dBm (strict entry)
+        : AppConstants.confirmationRssiThreshold; // -82 dBm (lenient staying)
+    
+    _logger.d('📏 Using threshold: $thresholdToUse (state: $_currentAttendanceState)');
+    
+    // Basic range check using SMOOTHED RSSI
+    if (smoothedRssi <= thresholdToUse) {
+      _logger.d('⚠️ Smoothed RSSI ($smoothedRssi) below threshold ($thresholdToUse)');
       // Only reset if we're not awaiting confirmation
       if (_currentAttendanceState != 'provisional') {
         _resetAttendanceState();
@@ -365,6 +520,7 @@ class BeaconService {
     }
     
     // FAST TRACK: If signal is very strong and stable (stationary scenario)
+    // Use raw RSSI for fast track (already added to smoothing buffer above)
     _rssiHistory.add(rssi);
     _rssiTimestamps.add(DateTime.now());
     
@@ -376,12 +532,13 @@ class BeaconService {
     }
     
     // INSTANT ATTENDANCE for strong, stable signals (stationary users)
-    if (rssi > -60 && _rssiHistory.length >= 2) { // Very close and stable
+    // 🎯 Use smoothed RSSI for stability check
+    if (smoothedRssi > -60 && _rssiHistory.length >= 2) { // Very close and stable
       final recentReadings = _rssiHistory.take(2).toList();
       final variance = (recentReadings[0] - recentReadings[1]).abs();
       
       if (variance <= 5) { // Very stable = stationary
-        print("FAST TRACK: Strong stable signal detected (RSSI: $rssi, variance: $variance)");
+        _logger.i("⚡ FAST TRACK: Strong stable signal detected (Smoothed RSSI: $smoothedRssi, variance: $variance)");
         if (_currentAttendanceState == 'scanning') {
           _currentAttendanceState = 'confirmed';
           _onAttendanceStateChanged?.call('confirmed', studentId, classId);
@@ -391,8 +548,9 @@ class BeaconService {
     }
     
     // REGULAR FLOW: For moving users or weaker signals
-    if (!_isSignalStable(rssi)) {
-      print("Signal not stable yet, continuing analysis...");
+    // 🎯 Use smoothed RSSI for stability check
+    if (!_isSignalStable(smoothedRssi)) {
+      _logger.d("Signal not stable yet, continuing analysis...");
       return false;
     }
     

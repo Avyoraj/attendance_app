@@ -138,6 +138,42 @@ class HttpService {
     }
   }
 
+  /// NEW: Cancel provisional attendance (student left before confirmation)
+  Future<Map<String, dynamic>> cancelProvisionalAttendance({
+    required String studentId,
+    required String classId,
+  }) async {
+    try {
+      final response = await post(
+        url: '$_baseUrl/attendance/cancel-provisional',
+        body: {
+          'studentId': studentId,
+          'classId': classId,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'data': data,
+        };
+      } else {
+        final error = jsonDecode(response.body);
+        return {
+          'success': false,
+          'error': error['error'] ?? 'Cancellation failed',
+        };
+      }
+    } catch (e) {
+      _logger.e('Cancel provisional error: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
   /// NEW: Stream RSSI data for co-location detection
   Future<Map<String, dynamic>> streamRSSI({
     required String studentId,
