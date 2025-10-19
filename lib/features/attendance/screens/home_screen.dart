@@ -8,7 +8,10 @@ import '../widgets/beacon_status_widget.dart';
 import '../../../core/services/beacon_service.dart';
 import '../../../core/services/continuous_beacon_service.dart';
 import '../../../core/services/logger_service.dart';
+import '../../../core/services/http_service.dart'; // 🎯 NEW: For backend API
+import '../../../core/services/notification_service.dart'; // 🔔 NEW: Enhanced notifications
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/schedule_utils.dart'; // 🎓 NEW: Schedule utilities
 import '../../auth/services/auth_service.dart';
 import '../../auth/screens/login_screen.dart';
 
@@ -29,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final AttendanceService _attendanceService = AttendanceService();
   final AuthService _authService = AuthService();
   final LoggerService _logger = LoggerService();
+  final HttpService _httpService = HttpService(); // 🎯 NEW: For backend API calls
   
   // Platform channel for notification updates
   static const platform = MethodChannel('com.example.attendance_app/beacon_service');
@@ -50,12 +54,239 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isAwaitingConfirmation = false;
   String? _provisionalAttendanceId;  // NEW: Track provisional attendance ID
   DateTime? _lastBeaconSeen;         // NEW: Track when beacon was last detected
+  DateTime? _lastNotificationUpdate; // ✅ NEW: Debounce notification updates
+  
+  // 🎯 NEW: State management for cooldown and class tracking
+  String? _currentClassId;           // Track which class we're checking into
+  Map<String, dynamic>? _cooldownInfo; // Cooldown information from BeaconService
 
   @override
   void initState() {
     super.initState();
     _initializeBeaconScanner();
     _checkBatteryOptimizationOnce();
+    _syncStateOnStartup(); // 🎯 NEW: Sync state from backend on startup
+  }
+  
+  /// 🎯 NEW: Sync state from backend on app startup
+  /// ✅ FIXED: Added timeout, loading state, and error handling
+  Future<void> _syncStateOnStartup() async {
+    try {
+      // Show loading state
+      if (mounted) {
+        setState(() {
+          _beaconStatus = '🔄 Loading attendance state...';
+          _isCheckingIn = true; // Show loading indicator
+        });
+      }
+      
+      _logger.info('🔄 Syncing attendance state from backend...');
+      
+      // ✅ FIX: Add 5-second timeout to prevent infinite waiting
+      final syncResult = await _beaconService
+          .syncStateFromBackend(widget.studentId)
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              _logger.warning('⏱️ Sync timeout (5s) - falling back to scanning mode');
+              return {'success': false, 'error': 'timeout'};
+            },
+          );
+      
+      if (!mounted) return;
+      
+      if (syncResult['success'] == true) {
+        final syncedCount = syncResult['synced'] ?? 0;
+        
+        if (syncedCount > 0) {
+          _logger.info('✅ Synced $syncedCount attendance records on startup');
+          
+          // 🔴 FIX: Don't call _loadCooldownInfo() here - will be called after handling state
+          // _loadCooldownInfo(); ← REMOVED (was clearing cancelled info!)
+          
+          // Check if we're in provisional state
+          final attendance = syncResult['attendance'] as List?;
+          if (attendance != null) {
+            for (var record in attendance) {
+              if (record['status'] == 'provisional') {
+                final remainingSeconds = record['remainingSeconds'] as int? ?? 0;
+                final classId = record['classId'] as String;
+                
+                if (remainingSeconds > 0) {
+                  _logger.info('⏱️ Resuming provisional countdown: $remainingSeconds seconds for Class $classId');
+                  
+                  // Resume provisional countdown in UI
+                  setState(() {
+                    _isAwaitingConfirmation = true;
+                    _remainingSeconds = remainingSeconds;
+                    _currentClassId = classId;
+                    _beaconStatus = '⏳ Check-in recorded for Class $classId!\n(Resumed) Stay in class to confirm attendance.';
+                  });
+                  
+                  // Start UI countdown timer (won't reset _remainingSeconds since it's already set)
+                  _startConfirmationTimer();
+                  
+                  // Show user feedback
+                  _showSnackBar('⏱️ Resumed: ${(remainingSeconds ~/ 60)}:${(remainingSeconds % 60).toString().padLeft(2, '0')} remaining');
+                  
+                  _logger.info('✅ UI countdown resumed successfully');
+                  break; // Only handle first provisional record
+                }
+              } else if (record['status'] == 'confirmed') {
+                // Show cooldown state for confirmed attendance
+                final classId = record['classId'] as String;
+                _logger.info('✅ Found confirmed attendance for Class $classId');
+                
+                setState(() {
+                  _currentClassId = classId;
+                  _beaconStatus = '✅ You\'re Already Checked In for Class $classId\nEnjoy your class!';
+                  // 🔒 FIX: Clear confirmation timer state when already confirmed
+                  _isAwaitingConfirmation = false;
+                  _remainingSeconds = 0;
+                  _isCheckingIn = false;
+                });
+                
+                // ✅ Load cooldown info ONLY for confirmed state
+                _loadCooldownInfo();
+                break; // Only handle first confirmed record
+              } else if (record['status'] == 'cancelled') {
+                // 🎓 NEW: Show cancelled state with schedule-aware info
+                final classId = record['classId'] as String;
+                final cancelledTime = DateTime.parse(record['checkInTime']);
+                _logger.info('❌ Found cancelled attendance for Class $classId');
+                
+                // Generate schedule-aware cancelled info
+                final cancelledInfo = ScheduleUtils.getScheduleAwareCancelledInfo(
+                  cancelledTime: cancelledTime,
+                  now: DateTime.now(),
+                );
+                
+                setState(() {
+                  _currentClassId = classId;
+                  _beaconStatus = '❌ Attendance Cancelled for Class $classId\n${cancelledInfo['message']}';
+                  _cooldownInfo = cancelledInfo;
+                  // 🔒 FIX: Clear confirmation timer state when cancelled
+                  _isAwaitingConfirmation = false;
+                  _remainingSeconds = 0;
+                  _isCheckingIn = false; // ✅ Clear loading state
+                });
+                
+                _logger.info('🎓 Cancelled state loaded with schedule awareness');
+                break; // Only handle first cancelled record
+              }
+            }
+          }
+        } else {
+          _logger.info('📭 No attendance records to sync');
+          // ✅ FIX: Clear loading state even if no records
+          setState(() {
+            _isCheckingIn = false;
+            _beaconStatus = '📡 Scanning for classroom beacon...';
+          });
+        }
+      } else {
+        _logger.warning('⚠️ State sync failed: ${syncResult['error']}');
+        // ✅ FIX: Fall back to scanning mode on error
+        setState(() {
+          _isCheckingIn = false;
+          _beaconStatus = '📡 Scanning for classroom beacon...';
+        });
+      }
+    } catch (e) {
+      _logger.error('❌ State sync error on startup', e);
+      // ✅ FIX: Don't block app on sync error
+      if (mounted) {
+        setState(() {
+          _isCheckingIn = false;
+          _beaconStatus = '📡 Scanning for classroom beacon...';
+        });
+      }
+    }
+  }
+  
+  /// 🎯 ENHANCED: Load cooldown info with schedule awareness
+  void _loadCooldownInfo() async {
+    // 🔒 FIX: Don't show cooldown card during confirmation period
+    if (_isAwaitingConfirmation) {
+      _logger.info('⏸️ Skipping cooldown info load - user is in confirmation period');
+      return;
+    }
+    
+    // 🔴 FIX: Don't override cancelled state with cooldown check
+    if (_beaconStatus.contains('Cancelled')) {
+      _logger.info('⏸️ Skipping cooldown info load - user has cancelled attendance');
+      return;
+    }
+    
+    final cooldown = _beaconService.getCooldownInfo();
+    if (cooldown != null && mounted) {
+      // Get basic cooldown data from BeaconService
+      final lastCheckInTime = DateTime.parse(cooldown['lastCheckInTime']);
+      final now = DateTime.now();
+      
+      // 🎓 NEW: Enhance with schedule-aware information
+      final scheduleInfo = ScheduleUtils.getScheduleAwareCooldownInfo(
+        classStartTime: lastCheckInTime,
+        now: now,
+      );
+      
+      // Merge schedule info with basic cooldown info
+      final enhancedInfo = {
+        ...cooldown,
+        ...scheduleInfo,
+      };
+      
+      setState(() {
+        _cooldownInfo = enhancedInfo;
+        _currentClassId = cooldown['classId'];
+      });
+      
+      _logger.info('🎓 Cooldown info updated with schedule awareness');
+    } else {
+      // 🎓 NEW: Check if there's a cancelled state that needs schedule info
+      try {
+        final result = await _httpService.getTodayAttendance(studentId: widget.studentId);
+        if (result['success'] == true) {
+          final attendance = result['attendance'] as List;
+          
+          // Look for cancelled attendance
+          for (var record in attendance) {
+            if (record['status'] == 'cancelled') {
+              final cancelledTime = DateTime.parse(record['checkInTime']);
+              final now = DateTime.now();
+              
+              // 🎓 NEW: Add schedule-aware cancelled info
+              final cancelledInfo = ScheduleUtils.getScheduleAwareCancelledInfo(
+                cancelledTime: cancelledTime,
+                now: now,
+              );
+              
+              setState(() {
+                _cooldownInfo = cancelledInfo;
+                _currentClassId = record['classId'];
+              });
+              
+              _logger.info('🎓 Cancelled info updated with schedule awareness');
+              break;
+            }
+          }
+        }
+      } catch (e) {
+        _logger.error('❌ Error loading cancelled state info', e);
+      }
+    }
+  }
+  
+  /// 🎯 NEW: Refresh cooldown info periodically
+  Timer? _cooldownRefreshTimer;
+  
+  void _startCooldownRefreshTimer() {
+    _cooldownRefreshTimer?.cancel();
+    _cooldownRefreshTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      if (mounted) {
+        _loadCooldownInfo();
+      }
+    });
   }
 
   Future<void> _checkBatteryOptimizationOnce() async {
@@ -151,17 +382,23 @@ class _HomeScreenState extends State<HomeScreen> {
       _beaconService.setOnAttendanceStateChanged((state, studentId, classId) {
         if (!mounted) return;
         
+        // 🎯 ALWAYS update current class ID when state changes
+        setState(() {
+          _currentClassId = classId;
+        });
+        
         switch (state) {
           case 'provisional':
             setState(() {
-              _beaconStatus = '⏳ Check-in recorded for Class $classId!\nStay in class for 10 minutes to confirm attendance.';
+              _beaconStatus = '⏳ Check-in recorded for Class $classId!\nStay in class for 3 minutes to confirm attendance.';
               _isCheckingIn = false; // Stop loading
             });
             _startConfirmationTimer();
-            _showSnackBar('✅ Provisional check-in successful! Stay for 10 min.');
+            _startCooldownRefreshTimer(); // Start refreshing cooldown
+            _showSnackBar('✅ Provisional check-in successful! Stay for 3 min.');
             print('✅ Provisional attendance recorded for $studentId in $classId');
             print('🔒 Status locked during confirmation period');
-            print('� Current status: $_beaconStatus');
+            print('📍 Current status: $_beaconStatus');
             break;
             
           case 'confirmed':
@@ -171,6 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _confirmationTimer?.cancel();
               _isCheckingIn = false;
             });
+            _loadCooldownInfo(); // Refresh cooldown info after confirmation
             _showSnackBar('🎉 Attendance confirmed! You\'re marked present.');
             print('✅ Attendance confirmed for $studentId in $classId');
             // DON'T pause - status is already locked
@@ -187,9 +425,18 @@ class _HomeScreenState extends State<HomeScreen> {
             break;
           
           case 'cooldown':
+            // 🔴 FIX: Don't override cancelled state with cooldown!
+            if (_beaconStatus.contains('Cancelled')) {
+              print('🔒 Cooldown blocked: User has cancelled attendance');
+              return; // Don't override cancelled state
+            }
+            
             // Cooldown active - already checked in recently
+            _loadCooldownInfo(); // Load cooldown details
             setState(() {
-              _beaconStatus = '✅ You\'re Already Checked In for Class $classId\nEnjoy your class! Next check-in available in 15 minutes.';
+              final cooldown = _beaconService.getCooldownInfo();
+              final minutesRemaining = cooldown?['minutesRemaining'] ?? 15;
+              _beaconStatus = '✅ You\'re Already Checked In for Class $classId\nEnjoy your class! Next check-in available in $minutesRemaining minutes.';
             });
             _showSnackBar('✅ You\'re already checked in. Enjoy your class!');
             print('⏳ Cooldown state - already checked in for $studentId in $classId');
@@ -260,14 +507,21 @@ class _HomeScreenState extends State<HomeScreen> {
             // This keeps the smoothing buffer alive for the final confirmation check
             _beaconService.feedRssiSample(rssi);
             
-            // 🔥 UPDATE NOTIFICATION with beacon status
-            try {
-              await platform.invokeMethod('updateNotification', {
+            // ✅ FIX: DEBOUNCE notification updates (max 1 per second)
+            // Prevents lag from too-frequent method channel calls
+            final now = DateTime.now();
+            if (_lastNotificationUpdate == null || 
+                now.difference(_lastNotificationUpdate!).inMilliseconds >= 1000) {
+              _lastNotificationUpdate = now;
+              
+              // Fire and forget (don't await to avoid blocking)
+              platform.invokeMethod('updateNotification', {
                 'text': '📍 Found $classId | RSSI: $rssi | ${distance.toStringAsFixed(1)}m'
+              }).catchError((e) {
+                print('⚠️ Notification update failed: $e');
               });
-              print('📲 Notification updated: $classId at ${distance.toStringAsFixed(1)}m');
-            } catch (e) {
-              print('⚠️ Failed to update notification: $e');
+              
+              print('📲 Notification updated: $classId at ${distance.toStringAsFixed(1)}m (RSSI: $rssi)');
             }
           }
           
@@ -284,6 +538,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _beaconStatus.contains('CONFIRMED') ||
               _beaconStatus.contains('Attendance Recorded') ||  // Protect "Attendance Recorded" message
               _beaconStatus.contains('Already Checked In') ||   // Protect "Already Checked In" message
+              _beaconStatus.contains('Cancelled') ||            // 🔴 FIX: Protect "Cancelled" state too!
               _beaconStatus.contains('Processing') ||
               _beaconStatus.contains('Recording your attendance')) {
             // Status is locked - don't change it
@@ -314,8 +569,10 @@ class _HomeScreenState extends State<HomeScreen> {
           } else {
             // NO BEACONS DETECTED
             
-            // NEW: Check if user left during provisional period
-            if (_isAwaitingConfirmation && _lastBeaconSeen != null) {
+            // 🔒 FIX: Only check for beacon loss during provisional period (not after confirmation)
+            if (_isAwaitingConfirmation && 
+                _remainingSeconds > 0 && 
+                _lastBeaconSeen != null) {
               final timeSinceLastBeacon = DateTime.now().difference(_lastBeaconSeen!);
               
               // If no beacon for 10 seconds during countdown, cancel attendance
@@ -327,35 +584,65 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Cancel the confirmation
                 _confirmationTimer?.cancel();
                 
+                // 🔒 FIX: Generate cancelled info for the card
+                final cancelledTime = DateTime.now();
+                final cancelledInfo = ScheduleUtils.getScheduleAwareCancelledInfo(
+                  cancelledTime: cancelledTime,
+                  now: cancelledTime,
+                );
+                
                 // Reset state
                 setState(() {
                   _isAwaitingConfirmation = false;
                   _remainingSeconds = 0;
                   _beaconStatus = '❌ You left the classroom!\nProvisional attendance cancelled.';
                   _isCheckingIn = false;
+                  _cooldownInfo = cancelledInfo; // 🔒 Set cancelled info for the badge
                 });
                 
                 // Show user feedback
                 _showSnackBar('❌ Attendance cancelled - you left the classroom');
                 
-                // TODO: Call backend API to delete provisional attendance
-                // For now, it will just expire after 30 seconds
+                // Call backend to cancel provisional attendance
+                if (_currentClassId != null) {
+                  try {
+                    await _httpService.cancelProvisionalAttendance(
+                      studentId: widget.studentId,
+                      classId: _currentClassId!,
+                    );
+                    print('✅ Backend cancelled provisional attendance');
+                  } catch (e) {
+                    print('⚠️ Error cancelling on backend: $e');
+                  }
+                }
                 
                 // Reset last beacon time
                 _lastBeaconSeen = null;
               }
             }
             
-            setState(() {
-              _beaconStatus = 'Scanning for classroom beacon...';
-            });
-            // Update notification when no beacons
-            try {
-              await platform.invokeMethod('updateNotification', {
-                'text': '🔍 Searching for beacons...'
+            // ✅ FIX: Better "no beacon" feedback - only update if not in critical state
+            if (!_isAwaitingConfirmation && 
+                !_beaconStatus.contains('CONFIRMED') &&
+                !_beaconStatus.contains('Cancelled') &&
+                !_beaconStatus.contains('Already Checked In') &&
+                !_beaconStatus.contains('Check-in recorded')) {
+              setState(() {
+                _beaconStatus = '🔍 Searching for classroom beacon...\nMove closer to the classroom.';
               });
-            } catch (e) {
-              print('⚠️ Failed to update notification: $e');
+              
+              // Update notification when no beacons (debounced)
+              final now = DateTime.now();
+              if (_lastNotificationUpdate == null || 
+                  now.difference(_lastNotificationUpdate!).inMilliseconds >= 2000) {
+                _lastNotificationUpdate = now;
+                
+                platform.invokeMethod('updateNotification', {
+                  'text': '🔍 Searching for beacons...'
+                }).catchError((e) {
+                  print('⚠️ Notification update failed: $e');
+                });
+              }
             }
           }
         },
@@ -434,11 +721,25 @@ class _HomeScreenState extends State<HomeScreen> {
   }
   
   void _startConfirmationTimer() {
-    // Use constant from app_constants (currently 60 seconds for testing)
+    // 🔒 FIX: Clear cooldown info when entering confirmation period
     setState(() {
-      _remainingSeconds = AppConstants.secondCheckDelay.inSeconds; // ✅ Use constant
-      _isAwaitingConfirmation = true;
+      _cooldownInfo = null;
     });
+    
+    // 🎯 FIXED: Only set _remainingSeconds if it's not already set (for resume scenarios)
+    // If _remainingSeconds is already set (from backend sync), use that value
+    if (_remainingSeconds <= 0) {
+      // New check-in: use full duration from constants
+      setState(() {
+        _remainingSeconds = AppConstants.secondCheckDelay.inSeconds; // ✅ Use constant
+        _isAwaitingConfirmation = true;
+      });
+    } else {
+      // Resume from backend: keep existing _remainingSeconds, just set flag
+      setState(() {
+        _isAwaitingConfirmation = true;
+      });
+    }
     
     print('🔍 TIMER DEBUG: Started - remaining=$_remainingSeconds seconds, awaiting=$_isAwaitingConfirmation');
     
@@ -452,13 +753,251 @@ class _HomeScreenState extends State<HomeScreen> {
             print('⏱️ Timer tick: $_remainingSeconds seconds remaining (awaiting: $_isAwaitingConfirmation)');
           });
         } else {
+          // 🎯 Timer expired - time to confirm attendance!
           timer.cancel();
-          setState(() {
-            _isAwaitingConfirmation = false;
-          });
+          print('🔔 Timer expired! Checking final RSSI for confirmation...');
+          _performFinalConfirmationCheck();
         }
       },
     );
+  }
+  
+  /// 🎯 NEW: Perform final RSSI check and confirm/cancel attendance
+  /// 🔴 CRITICAL FIX: Use raw RSSI data (not cached) to prevent false confirmations
+  Future<void> _performFinalConfirmationCheck() async {
+    print('🔍 CONFIRMATION CHECK: Starting final RSSI verification...');
+    
+    // 🔴 CRITICAL: Get RAW RSSI data (bypasses grace period cache)
+    // This prevents false confirmations when user has left but grace period is active
+    final rssiData = _beaconService.getRawRssiData();
+    final currentRssi = rssiData['rssi'] as int?;
+    final rssiAge = rssiData['ageSeconds'] as int?;
+    final isInGracePeriod = rssiData['isInGracePeriod'] as bool? ?? false;
+    final threshold = AppConstants.confirmationRssiThreshold; // -82 dBm
+    
+    print('📊 CONFIRMATION CHECK:');
+    print('   - Raw RSSI: $currentRssi dBm ${isInGracePeriod ? "(⚠️ IN GRACE PERIOD)" : ""}');
+    print('   - RSSI Age: ${rssiAge ?? "N/A"}s');
+    print('   - Threshold: $threshold dBm');
+    print('   - Required: RSSI >= $threshold AND age <= 3s AND not in grace period');
+    
+    // 🔴 CRITICAL: Check RSSI staleness (must be fresh, within 3 seconds)
+    if (currentRssi == null) {
+      print('❌ CANCELLED: No RSSI data available - beacon lost');
+      
+      // Perform cancellation
+      final cancelledTime = DateTime.now();
+      final cancelledInfo = ScheduleUtils.getScheduleAwareCancelledInfo(
+        cancelledTime: cancelledTime,
+        now: cancelledTime,
+      );
+      
+      setState(() {
+        _beaconStatus = '❌ Attendance Cancelled!\nNo beacon detected during confirmation.';
+        _isAwaitingConfirmation = false;
+        _remainingSeconds = 0;
+        _isCheckingIn = false;
+        _cooldownInfo = cancelledInfo;
+      });
+      
+      _showSnackBar('❌ Attendance cancelled - beacon lost!');
+      
+      if (_currentClassId != null) {
+        await NotificationService.showCancelledNotification(
+          classId: _currentClassId!,
+          cancelledTime: cancelledTime,
+        );
+        
+        try {
+          await _httpService.cancelProvisionalAttendance(
+            studentId: widget.studentId,
+            classId: _currentClassId!,
+          );
+        } catch (e) {
+          print('⚠️ Error cancelling on backend: $e');
+        }
+      }
+      return;
+    }
+    
+    if (rssiAge != null && rssiAge > 3) {
+      print('❌ CANCELLED: RSSI data is stale (${rssiAge}s old) - not reliable');
+      
+      // Perform cancellation
+      final cancelledTime = DateTime.now();
+      final cancelledInfo = ScheduleUtils.getScheduleAwareCancelledInfo(
+        cancelledTime: cancelledTime,
+        now: cancelledTime,
+      );
+      
+      setState(() {
+        _beaconStatus = '❌ Attendance Cancelled!\nBeacon data is stale.';
+        _isAwaitingConfirmation = false;
+        _remainingSeconds = 0;
+        _isCheckingIn = false;
+        _cooldownInfo = cancelledInfo;
+      });
+      
+      _showSnackBar('❌ Attendance cancelled - beacon signal lost!');
+      
+      if (_currentClassId != null) {
+        await NotificationService.showCancelledNotification(
+          classId: _currentClassId!,
+          cancelledTime: cancelledTime,
+        );
+        
+        try {
+          await _httpService.cancelProvisionalAttendance(
+            studentId: widget.studentId,
+            classId: _currentClassId!,
+          );
+        } catch (e) {
+          print('⚠️ Error cancelling on backend: $e');
+        }
+      }
+      return;
+    }
+    
+    // 🔴 CRITICAL: Reject if we're in grace period (using cached old values)
+    if (isInGracePeriod) {
+      print('❌ CANCELLED: In grace period - RSSI is cached (not real-time)');
+      print('   This prevents false confirmations from cached "good" RSSI values');
+      
+      // Perform cancellation
+      final cancelledTime = DateTime.now();
+      final cancelledInfo = ScheduleUtils.getScheduleAwareCancelledInfo(
+        cancelledTime: cancelledTime,
+        now: cancelledTime,
+      );
+      
+      setState(() {
+        _beaconStatus = '❌ Attendance Cancelled!\nBeacon signal too weak.';
+        _isAwaitingConfirmation = false;
+        _remainingSeconds = 0;
+        _isCheckingIn = false;
+        _cooldownInfo = cancelledInfo;
+      });
+      
+      _showSnackBar('❌ Attendance cancelled - you may have left!');
+      
+      if (_currentClassId != null) {
+        await NotificationService.showCancelledNotification(
+          classId: _currentClassId!,
+          cancelledTime: cancelledTime,
+        );
+        
+        try {
+          await _httpService.cancelProvisionalAttendance(
+            studentId: widget.studentId,
+            classId: _currentClassId!,
+          );
+        } catch (e) {
+          print('⚠️ Error cancelling on backend: $e');
+        }
+      }
+      return;
+    }
+    
+    // 🔴 CRITICAL: Strict RSSI threshold check
+    if (currentRssi >= threshold) {
+      // ✅ User is still in range - CONFIRM attendance
+      print('✅ CONFIRMED: User is in range (RSSI: $currentRssi >= $threshold)');
+      
+      setState(() {
+        _beaconStatus = '✅ Attendance CONFIRMED!\nYou stayed in the classroom.';
+        _isAwaitingConfirmation = false;
+        _remainingSeconds = 0;
+      });
+      
+      // Call backend to confirm
+      if (_currentClassId != null) {
+        try {
+          final result = await _httpService.confirmAttendance(
+            studentId: widget.studentId,
+            classId: _currentClassId!,
+          );
+          
+          if (result['success'] == true) {
+            _showSnackBar('✅ Attendance confirmed successfully!');
+            print('✅ Backend confirmed attendance for ${widget.studentId} in $_currentClassId');
+            
+            // 🔔 Show success notification (lock screen + sound)
+            await NotificationService.showSuccessNotification(
+              classId: _currentClassId!,
+              message: 'Logged at ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
+            );
+            
+            // 🔔 Show cooldown notification with live countdown
+            // Use current time as class start (notification service will calculate next class)
+            await NotificationService.showCooldownNotification(
+              classId: _currentClassId!,
+              classStartTime: DateTime.now(),
+            );
+            
+            // Load cooldown info for next check-in
+            _loadCooldownInfo();
+          } else {
+            _showSnackBar('⚠️ Confirmation saved locally, will sync later');
+            print('⚠️ Backend confirmation failed: ${result['message']}');
+          }
+        } catch (e) {
+          _showSnackBar('⚠️ Confirmation saved locally, will sync later');
+          print('❌ Error confirming attendance: $e');
+        }
+      } else {
+        print('⚠️ Cannot confirm: _currentClassId is null');
+        _showSnackBar('⚠️ Error: Class ID not available');
+      }
+      
+    } else {
+      // ❌ User left the classroom - CANCEL attendance
+      print('❌ CANCELLED: User left classroom (RSSI: $currentRssi < $threshold)');
+      
+      // 🔒 FIX: Generate cancelled info for the card
+      final cancelledTime = DateTime.now();
+      final cancelledInfo = ScheduleUtils.getScheduleAwareCancelledInfo(
+        cancelledTime: cancelledTime,
+        now: cancelledTime,
+      );
+      
+      setState(() {
+        _beaconStatus = '❌ Attendance Cancelled!\nYou left the classroom during the confirmation period.';
+        _isAwaitingConfirmation = false;
+        _remainingSeconds = 0;
+        _isCheckingIn = false;
+        _cooldownInfo = cancelledInfo; // 🔒 Set cancelled info for the badge
+      });
+      
+      _showSnackBar('❌ Attendance cancelled - you left too early!');
+      
+      // 🔔 Show cancelled notification with next class info
+      if (_currentClassId != null) {
+        await NotificationService.showCancelledNotification(
+          classId: _currentClassId!,
+          cancelledTime: cancelledTime,
+        );
+      }
+      
+      // Call backend to cancel provisional attendance
+      if (_currentClassId != null) {
+        try {
+          final result = await _httpService.cancelProvisionalAttendance(
+            studentId: widget.studentId,
+            classId: _currentClassId!,
+          );
+          
+          if (result['success'] == true) {
+            print('✅ Backend cancelled provisional attendance for ${widget.studentId}');
+          } else {
+            print('⚠️ Backend cancel failed: ${result['message']}');
+          }
+        } catch (e) {
+          print('⚠️ Error cancelling on backend: $e');
+        }
+      } else {
+        print('⚠️ Cannot cancel: _currentClassId is null');
+      }
+    }
   }
   
   Future<void> _handleLogout() async {
@@ -504,6 +1043,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _confirmationTimer?.cancel();
+    _cooldownRefreshTimer?.cancel(); // 🎯 NEW: Cancel cooldown refresh timer
     _streamRanging?.cancel();
     _beaconService.dispose();
     super.dispose();
@@ -593,6 +1133,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 studentId: widget.studentId,
                 remainingSeconds: _remainingSeconds,
                 isAwaitingConfirmation: _isAwaitingConfirmation,
+                cooldownInfo: _cooldownInfo, // 🎯 Pass cooldown info
+                currentClassId: _currentClassId, // 🎯 Pass current class ID
               ),
             ),
           ],

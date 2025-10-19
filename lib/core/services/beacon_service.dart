@@ -470,6 +470,31 @@ class BeaconService {
     _addRssiSample(rssi);
     _logger.d('📥 External RSSI sample fed: $rssi dBm (Buffer: ${_rssiSmoothingBuffer.length})');
   }
+  
+  /// 🔴 CRITICAL: Get raw RSSI data WITHOUT grace period fallback
+  /// Used for final confirmation check to prevent false confirmations
+  /// This bypasses the exit hysteresis logic that caches old "good" values
+  Map<String, dynamic> getRawRssiData() {
+    final now = DateTime.now();
+    
+    // Get most recent RSSI timestamp
+    final mostRecentTime = _rssiSmoothingTimestamps.isNotEmpty 
+        ? _rssiSmoothingTimestamps.last 
+        : null;
+    
+    // Calculate RSSI age
+    final rssiAge = mostRecentTime != null 
+        ? now.difference(mostRecentTime) 
+        : null;
+    
+    return {
+      'rssi': _currentRssi, // Real current RSSI (NOT cached _lastKnownGoodRssi)
+      'timestamp': mostRecentTime,
+      'ageSeconds': rssiAge?.inSeconds,
+      'bufferSize': _rssiSmoothingBuffer.length,
+      'isInGracePeriod': _isInGracePeriod, // Flag if we're using cached values
+    };
+  }
 
   // Enhanced beacon detection with all advanced features
   bool analyzeBeacon(Beacon beacon, String studentId, String classId) {
@@ -604,6 +629,125 @@ class BeaconService {
       'minutesRemaining': minutesRemaining > 0 ? minutesRemaining : 0,
       'isActive': minutesRemaining > 0,
     };
+  }
+
+  /// 🎯 NEW: Sync attendance state from backend (called on app startup/login)
+  /// This prevents "already checked in" confusion by restoring state from backend
+  Future<Map<String, dynamic>> syncStateFromBackend(String studentId) async {
+    try {
+      _logger.i('🔄 Syncing attendance state from backend for student: $studentId');
+      
+      // Fetch today's attendance from backend
+      final result = await _httpService.getTodayAttendance(studentId: studentId);
+      
+      if (result['success'] != true) {
+        _logger.e('❌ Failed to sync state: ${result['error']}');
+        return {
+          'success': false,
+          'error': result['error'],
+          'synced': 0,
+        };
+      }
+      
+      final attendance = result['attendance'] as List;
+      _logger.i('📥 Received ${attendance.length} attendance records from backend');
+      
+      int syncedCount = 0;
+      
+      for (var record in attendance) {
+        final classId = record['classId'] as String;
+        final status = record['status'] as String;
+        
+        _logger.i('   Class $classId: $status');
+        
+        if (status == 'confirmed') {
+          // Restore cooldown for confirmed attendance
+          final confirmedAt = record['confirmedAt'] != null 
+              ? DateTime.parse(record['confirmedAt'] as String)
+              : null;
+          
+          if (confirmedAt != null) {
+            // Set cooldown tracking
+            _lastCheckInTime = confirmedAt;
+            _lastCheckedStudentId = studentId;
+            _lastCheckedClassId = classId;
+            
+            final timeSinceConfirmation = DateTime.now().difference(confirmedAt);
+            final minutesRemaining = 15 - timeSinceConfirmation.inMinutes;
+            
+            if (minutesRemaining > 0) {
+              _logger.i('   ✅ Restored cooldown: $minutesRemaining minutes remaining');
+              syncedCount++;
+            } else {
+              _logger.i('   ⏰ Cooldown expired (${timeSinceConfirmation.inMinutes} minutes ago)');
+            }
+          }
+        } else if (status == 'provisional') {
+          // Resume provisional countdown if still valid
+          final remainingSeconds = record['remainingSeconds'] as int? ?? 0;
+          final attendanceId = record['attendanceId'] as String?;
+          
+          if (remainingSeconds > 0 && attendanceId != null) {
+            _logger.i('   ⏱️ Resuming provisional countdown: ${remainingSeconds}s remaining');
+            
+            // Set state to provisional
+            _currentAttendanceState = 'provisional';
+            _currentStudentId = studentId;
+            _currentClassId = classId;
+            
+            // Schedule confirmation with remaining time
+            _confirmationService.scheduleConfirmation(
+              attendanceId: attendanceId,
+              studentId: studentId,
+              classId: classId,
+            );
+            
+            // Restart RSSI streaming for co-location detection
+            _rssiStreamService.startStreaming(
+              studentId: studentId,
+              classId: classId,
+              sessionDate: DateTime.now(),
+            );
+            
+            _logger.i('   📡 RSSI streaming restarted for provisional attendance');
+            syncedCount++;
+            
+            // Notify UI about provisional state
+            _onAttendanceStateChanged?.call('provisional', studentId, classId);
+          } else if (record['shouldConfirm'] == true) {
+            // Provisional time expired - should have been confirmed
+            _logger.w('   ⚠️ Provisional expired - backend should confirm/cancel');
+          }
+        } else if (status == 'cancelled') {
+          // 🔴 FIX: Clear cooldown for cancelled attendance
+          // Cancelled attendance should NOT trigger cooldown - user can try again!
+          _logger.i('   ❌ Found cancelled attendance - clearing cooldown');
+          
+          // Clear cooldown tracking so user can check in again
+          _lastCheckInTime = null;
+          _lastCheckedStudentId = null;
+          _lastCheckedClassId = null;
+          
+          syncedCount++;
+        }
+      }
+      
+      _logger.i('✅ State sync complete: $syncedCount records synced');
+      
+      return {
+        'success': true,
+        'synced': syncedCount,
+        'total': attendance.length,
+        'attendance': attendance,
+      };
+    } catch (e) {
+      _logger.e('❌ State sync error: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+        'synced': 0,
+      };
+    }
   }
 
   void dispose() {

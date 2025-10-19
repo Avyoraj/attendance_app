@@ -56,4 +56,20 @@ class AppConstants {
   // Timing
   static const Duration checkInCooldown = Duration(seconds: 30);
 
+  // 🎓 NEW: College Schedule Configuration
+  // College timing: 10:30 AM to 5:30 PM
+  // 1-hour classes with 30-minute break from 1:30 PM to 2:00 PM
+  static const int collegeStartHour = 10;
+  static const int collegeStartMinute = 30;
+  static const int collegeEndHour = 17;
+  static const int collegeEndMinute = 30;
+  
+  static const int breakStartHour = 13;
+  static const int breakStartMinute = 30;
+  static const int breakEndHour = 14;
+  static const int breakEndMinute = 0;
+  
+  static const Duration classDuration = Duration(hours: 1);
+  static const Duration cooldownDuration = Duration(minutes: 15);
+
 }

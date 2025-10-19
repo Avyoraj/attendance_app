@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../../../core/constants/app_constants.dart'; // ✅ Import for constants
 
 class BeaconStatusWidget extends StatelessWidget {
   final String status;
@@ -7,6 +8,8 @@ class BeaconStatusWidget extends StatelessWidget {
   final String studentId;
   final int? remainingSeconds;
   final bool isAwaitingConfirmation;
+  final Map<String, dynamic>? cooldownInfo; // 🎯 NEW: Cooldown information
+  final String? currentClassId; // 🎯 NEW: Current class ID
 
   const BeaconStatusWidget({
     super.key,
@@ -15,6 +18,8 @@ class BeaconStatusWidget extends StatelessWidget {
     required this.studentId,
     this.remainingSeconds,
     this.isAwaitingConfirmation = false,
+    this.cooldownInfo, // 🎯 NEW: Optional cooldown info
+    this.currentClassId, // 🎯 NEW: Optional class ID
   });
 
   @override
@@ -109,7 +114,7 @@ class BeaconStatusWidget extends StatelessWidget {
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(4),
                                 child: LinearProgressIndicator(
-                                  value: remainingSeconds! / 30.0,
+                                  value: remainingSeconds! / AppConstants.secondCheckDelay.inSeconds, // ✅ Use constant
                                   minHeight: 6,
                                   backgroundColor: Colors.orange.shade100,
                                   valueColor: AlwaysStoppedAnimation<Color>(Colors.orange.shade600),
@@ -121,7 +126,9 @@ class BeaconStatusWidget extends StatelessWidget {
                       ],
                       
                       // Confirmed Badge
-                      if (status.contains('CONFIRMED') && !isAwaitingConfirmation) ...[
+                      // 🔒 FIX: Show badge for both "CONFIRMED" and "Already Checked In"
+                      if ((status.contains('CONFIRMED') || status.contains('Already Checked In')) && 
+                          !isAwaitingConfirmation) ...[
                         const SizedBox(height: 20),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -143,6 +150,292 @@ class BeaconStatusWidget extends StatelessWidget {
                                   fontSize: 14,
                                 ),
                               ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      
+                      // 🎯 ENHANCED: Schedule-Aware Cooldown Information
+                      // 🔒 FIX: Only show cooldown card if NOT in cancelled state
+                      if (cooldownInfo != null && 
+                          cooldownInfo!['inCooldown'] == true && 
+                          !status.contains('Cancelled') && 
+                          !status.contains('cancelled')) ...[
+                        const SizedBox(height: 20),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.blue.shade50, Colors.blue.shade100],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.blue.shade300, width: 1.5),
+                          ),
+                          child: Column(
+                            children: [
+                              // Header
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.schedule, color: Colors.blue.shade700, size: 22),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Cooldown Active',
+                                    style: TextStyle(
+                                      color: Colors.blue.shade900,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              
+                              if (currentClassId != null) ...[
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade200,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    'Class: $currentClassId',
+                                    style: TextStyle(
+                                      color: Colors.blue.shade900,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              
+                              const SizedBox(height: 12),
+                              Divider(color: Colors.blue.shade300, height: 1),
+                              const SizedBox(height: 12),
+                              
+                              // 🎓 Class End Time (Schedule-aware)
+                              if (cooldownInfo!.containsKey('classEndTimeFormatted') && 
+                                  cooldownInfo!['classEnded'] == false) ...[
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.access_time, color: Colors.blue.shade600, size: 18),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Class ends at ',
+                                      style: TextStyle(
+                                        color: Colors.blue.shade700,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    Text(
+                                      cooldownInfo!['classEndTimeFormatted'],
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue.shade900,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (cooldownInfo!.containsKey('classTimeLeftFormatted')) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '(${cooldownInfo!['classTimeLeftFormatted']})',
+                                    style: TextStyle(
+                                      color: Colors.blue.shade600,
+                                      fontSize: 12,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                              ],
+                              
+                              // 🔒 FIX: Removed "Next check-in available" - not needed
+                              // User can attend class normally, no need for another check-in
+                              
+                              // Schedule message (if available)
+                              if (cooldownInfo!.containsKey('message') && 
+                                  cooldownInfo!['message'] != null) ...[
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.7),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    cooldownInfo!['message'],
+                                    style: TextStyle(
+                                      color: Colors.blue.shade800,
+                                      fontSize: 12,
+                                      height: 1.4,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                      
+                      // 🎯 ENHANCED: Schedule-Aware Cancelled Badge
+                      if (status.contains('Cancelled') || status.contains('cancelled')) ...[
+                        const SizedBox(height: 20),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.red.shade50, Colors.red.shade100],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.red.shade300, width: 1.5),
+                          ),
+                          child: Column(
+                            children: [
+                              // Header with icon
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.cancel, color: Colors.red.shade700, size: 24),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'Attendance Cancelled',
+                                    style: TextStyle(
+                                      color: Colors.red.shade900,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              
+                              // 🎓 Enhanced: Show class schedule info if available in cooldownInfo
+                              if (cooldownInfo != null) ...[
+                                const SizedBox(height: 12),
+                                Divider(color: Colors.red.shade300, height: 1),
+                                const SizedBox(height: 12),
+                                
+                                // Current class end time
+                                if (cooldownInfo!.containsKey('classEndTimeFormatted') &&
+                                    cooldownInfo!.containsKey('classEnded') &&
+                                    cooldownInfo!['classEnded'] == false) ...[
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.access_time, color: Colors.red.shade600, size: 18),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Current class ends at ',
+                                        style: TextStyle(
+                                          color: Colors.red.shade700,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      Text(
+                                        cooldownInfo!['classEndTimeFormatted'],
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.red.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (cooldownInfo!.containsKey('classTimeLeftFormatted')) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '(${cooldownInfo!['classTimeLeftFormatted']})',
+                                      style: TextStyle(
+                                        color: Colors.red.shade600,
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 12),
+                                ],
+                                
+                                // Next class time
+                                if (cooldownInfo!.containsKey('nextClassTimeFormatted')) ...[
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.7),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Text(
+                                          'Try again in next class:',
+                                          style: TextStyle(
+                                            color: Colors.red.shade700,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.class_, color: Colors.red.shade800, size: 18),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              cooldownInfo!['nextClassTimeFormatted'],
+                                              style: TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.red.shade900,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        if (cooldownInfo!.containsKey('timeUntilNextFormatted')) ...[
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '(${cooldownInfo!['timeUntilNextFormatted']})',
+                                            style: TextStyle(
+                                              color: Colors.red.shade600,
+                                              fontSize: 11,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                
+                                // Full message (if available)
+                                if (cooldownInfo!.containsKey('message') &&
+                                    cooldownInfo!['message'] != null) ...[
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    cooldownInfo!['message'],
+                                    style: TextStyle(
+                                      color: Colors.red.shade800,
+                                      fontSize: 11,
+                                      height: 1.3,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ] else ...[
+                                // Fallback if no schedule info available
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Please try again in the next class',
+                                  style: TextStyle(
+                                    color: Colors.red.shade700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),

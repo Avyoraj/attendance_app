@@ -19,8 +19,12 @@ class BeaconForegroundService : Service() {
     companion object {
         const val CHANNEL_ID = "beacon_service_channel"
         const val SUCCESS_CHANNEL_ID = "attendance_success_channel"
+        const val COOLDOWN_CHANNEL_ID = "attendance_cooldown_channel"  // 🆕 NEW
+        const val CANCELLED_CHANNEL_ID = "attendance_cancelled_channel"  // 🆕 NEW
         const val NOTIFICATION_ID = 1001
         const val SUCCESS_NOTIFICATION_ID = 2000
+        const val COOLDOWN_NOTIFICATION_ID = 3000  // 🆕 NEW
+        const val CANCELLED_NOTIFICATION_ID = 4000  // 🆕 NEW
         const val METHOD_CHANNEL = "com.example.attendance_app/beacon_service"
         
         @Volatile // Ensure visibility across threads
@@ -86,6 +90,178 @@ class BeaconForegroundService : Service() {
                 
             notificationManager.notify(SUCCESS_NOTIFICATION_ID, notification)
             android.util.Log.d("BeaconService", "✅ Success notification shown: $title")
+        }
+        
+        // 🆕 NEW: Enhanced success notification with lock screen visibility
+        fun showSuccessNotificationEnhanced(context: Context, title: String, message: String, classId: String) {
+            android.util.Log.d("BeaconService", "🔔 Showing ENHANCED success notification: $title")
+            
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            
+            // Create enhanced success channel (HIGH importance for lock screen)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    SUCCESS_CHANNEL_ID,
+                    "Attendance Success",
+                    NotificationManager.IMPORTANCE_HIGH  // 🔔 HIGH = Shows on lock screen
+                ).apply {
+                    description = "Attendance confirmed notifications"
+                    setShowBadge(true)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC  // 🔓 Visible on lock screen
+                    enableLights(true)
+                    lightColor = android.graphics.Color.GREEN
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 500, 250, 500)  // Custom vibration
+                    setSound(
+                        android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,
+                        android.media.AudioAttributes.Builder()
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                            .build()
+                    )
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+            
+            val notificationIntent = Intent(context, MainActivity::class.java)
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                0,
+                notificationIntent,
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            
+            val notification = NotificationCompat.Builder(context, SUCCESS_CHANNEL_ID)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setStyle(NotificationCompat.BigTextStyle()
+                    .bigText(message)
+                    .setBigContentTitle(title))
+                .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+                .setColor(android.graphics.Color.GREEN)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)  // Dismissible
+                .setShowWhen(true)
+                .setWhen(System.currentTimeMillis())
+                .setPriority(NotificationCompat.PRIORITY_MAX)  // 🔔 MAX priority
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)  // 🔓 Lock screen
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)  // Sound + vibration + lights
+                .setFullScreenIntent(null, false)  // Don't launch full screen
+                .build()
+                
+            notificationManager.notify(SUCCESS_NOTIFICATION_ID, notification)
+            android.util.Log.d("BeaconService", "✅ ENHANCED success notification shown with lock screen support")
+        }
+        
+        // 🆕 NEW: Cooldown notification with live updates
+        fun showCooldownNotificationEnhanced(context: Context, title: String, message: String, classId: String, remainingMinutes: Int) {
+            android.util.Log.d("BeaconService", "🕐 Showing cooldown notification: $title")
+            
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            
+            // Create cooldown channel (DEFAULT importance for visibility without sound)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    COOLDOWN_CHANNEL_ID,
+                    "Cooldown & Next Class",
+                    NotificationManager.IMPORTANCE_DEFAULT  // 🔔 DEFAULT = Visible on lock screen, no sound
+                ).apply {
+                    description = "Cooldown and next class reminders"
+                    setShowBadge(true)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC  // 🔓 Visible on lock screen
+                    enableLights(false)
+                    enableVibration(false)  // Silent updates
+                    setSound(null, null)  // No sound for updates
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+            
+            val notificationIntent = Intent(context, MainActivity::class.java)
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                0,
+                notificationIntent,
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            
+            // 🔥 LIVE NOTIFICATION: Use chronometer for countdown
+            val notification = NotificationCompat.Builder(context, COOLDOWN_CHANNEL_ID)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setStyle(NotificationCompat.BigTextStyle()
+                    .bigText(message)
+                    .setBigContentTitle(title))
+                .setSmallIcon(android.R.drawable.ic_menu_recent_history)
+                .setColor(android.graphics.Color.BLUE)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(false)  // Keep showing
+                .setOngoing(true)  // 🔥 LIVE: Can't be dismissed (like timer)
+                .setShowWhen(true)
+                .setWhen(System.currentTimeMillis())
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)  // 🔓 Lock screen
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setSilent(true)  // No sound for updates
+                .setOnlyAlertOnce(true)  // Only vibrate on first show
+                .build()
+                
+            notificationManager.notify(COOLDOWN_NOTIFICATION_ID, notification)
+            android.util.Log.d("BeaconService", "✅ Cooldown notification shown (live update)")
+        }
+        
+        // 🆕 NEW: Cancelled notification with next class info
+        fun showCancelledNotificationEnhanced(context: Context, title: String, message: String, classId: String) {
+            android.util.Log.d("BeaconService", "❌ Showing cancelled notification: $title")
+            
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            
+            // Create cancelled channel
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    CANCELLED_CHANNEL_ID,
+                    "Attendance Cancelled",
+                    NotificationManager.IMPORTANCE_HIGH  // 🔔 HIGH = Shows on lock screen
+                ).apply {
+                    description = "Attendance cancelled notifications"
+                    setShowBadge(true)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC  // 🔓 Visible on lock screen
+                    enableLights(true)
+                    lightColor = android.graphics.Color.RED
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 300, 200, 300)
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+            
+            val notificationIntent = Intent(context, MainActivity::class.java)
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                0,
+                notificationIntent,
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            
+            val notification = NotificationCompat.Builder(context, CANCELLED_CHANNEL_ID)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setStyle(NotificationCompat.BigTextStyle()
+                    .bigText(message)
+                    .setBigContentTitle(title))
+                .setSmallIcon(android.R.drawable.ic_delete)
+                .setColor(android.graphics.Color.RED)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)  // Dismissible
+                .setShowWhen(true)
+                .setWhen(System.currentTimeMillis())
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)  // 🔓 Lock screen
+                .setCategory(NotificationCompat.CATEGORY_ERROR)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
+                .build()
+                
+            notificationManager.notify(CANCELLED_NOTIFICATION_ID, notification)
+            android.util.Log.d("BeaconService", "✅ Cancelled notification shown with lock screen support")
         }
         
         fun startService(context: Context) {

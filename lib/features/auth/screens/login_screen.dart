@@ -6,6 +6,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/services/continuous_beacon_service.dart';
 import '../../../core/services/logger_service.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../core/services/beacon_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,7 +32,10 @@ class _LoginScreenState extends State<LoginScreen> {
       final loginResult = await _authService.login(studentId);
       
       if (loginResult['success'] == true && mounted) {
-        // Login successful - start background service and navigate
+        // Login successful - sync state from backend first
+        await _syncAttendanceState(studentId);
+        
+        // Then start background service and navigate
         await _startBackgroundService();
         
         Navigator.of(context).pushReplacement(
@@ -87,6 +91,35 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       ),
     );
+  }
+
+  /// 🎯 NEW: Sync attendance state from backend after login
+  Future<void> _syncAttendanceState(String studentId) async {
+    try {
+      final logger = LoggerService();
+      logger.info('🔄 Syncing attendance state from backend...');
+      
+      final beaconService = BeaconService();
+      final syncResult = await beaconService.syncStateFromBackend(studentId);
+      
+      if (syncResult['success'] == true) {
+        final syncedCount = syncResult['synced'] ?? 0;
+        final totalRecords = syncResult['total'] ?? 0;
+        
+        logger.info('✅ State sync complete: $syncedCount/$totalRecords records synced');
+        
+        if (syncedCount > 0 && mounted) {
+          _showSnackBar('✅ Restored $syncedCount attendance record${syncedCount > 1 ? 's' : ''}');
+        }
+      } else {
+        logger.warning('⚠️ State sync failed: ${syncResult['error']}');
+        // Don't block login if sync fails - just log the error
+      }
+    } catch (e) {
+      final logger = LoggerService();
+      logger.error('❌ State sync error', e);
+      // Don't block login if sync fails
+    }
   }
 
   /// Auto-start background service after login

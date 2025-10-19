@@ -53,6 +53,28 @@ class MainActivity: FlutterActivity() {
                     BeaconForegroundService.showSuccessNotification(this, title, message)
                     result.success(true)
                 }
+                "showSuccessNotificationEnhanced" -> {
+                    val title = call.argument<String>("title") ?: "✅ Attendance Confirmed"
+                    val message = call.argument<String>("message") ?: "Logged"
+                    val classId = call.argument<String>("classId") ?: ""
+                    BeaconForegroundService.showSuccessNotificationEnhanced(this, title, message, classId)
+                    result.success(true)
+                }
+                "showCooldownNotificationEnhanced" -> {
+                    val title = call.argument<String>("title") ?: "🕐 Cooldown Active"
+                    val message = call.argument<String>("message") ?: "Next check-in available"
+                    val classId = call.argument<String>("classId") ?: ""
+                    val remainingMinutes = call.argument<Int>("remainingMinutes") ?: 15
+                    BeaconForegroundService.showCooldownNotificationEnhanced(this, title, message, classId, remainingMinutes)
+                    result.success(true)
+                }
+                "showCancelledNotificationEnhanced" -> {
+                    val title = call.argument<String>("title") ?: "❌ Attendance Cancelled"
+                    val message = call.argument<String>("message") ?: "Try again next class"
+                    val classId = call.argument<String>("classId") ?: ""
+                    BeaconForegroundService.showCancelledNotificationEnhanced(this, title, message, classId)
+                    result.success(true)
+                }
                 "isIgnoringBatteryOptimizations" -> {
                     val isIgnoring = BatteryOptimizationHelper.isIgnoringBatteryOptimizations(this)
                     result.success(isIgnoring)

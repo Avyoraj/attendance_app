@@ -213,6 +213,46 @@ class HttpService {
     }
   }
 
+  /// NEW: Get today's attendance status for a student
+  /// Used for state synchronization on app startup/login
+  Future<Map<String, dynamic>> getTodayAttendance({
+    required String studentId,
+  }) async {
+    try {
+      final response = await get(
+        url: '$_baseUrl/attendance/today/$studentId',
+      );
+
+      _logger.i('Get today attendance response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'studentId': data['studentId'],
+          'date': data['date'],
+          'count': data['count'],
+          'attendance': data['attendance'] as List,
+        };
+      } else {
+        final error = jsonDecode(response.body);
+        return {
+          'success': false,
+          'error': error['error'] ?? 'Failed to fetch attendance',
+          'message': error['message'] ?? 'Unknown error',
+        };
+      }
+    } catch (e) {
+      _logger.e('Get today attendance error: $e');
+      return {
+        'success': false,
+        'error': 'NETWORK_ERROR',
+        'message': e.toString(),
+        'attendance': [], // Return empty array to prevent null errors
+      };
+    }
+  }
+
   // Static method for background service (legacy)
   static Future<http.Response> submitAttendance(String studentId, String classId) async {
     const String apiUrl = 'https://your-backend-url.vercel.app/api/attendance';
