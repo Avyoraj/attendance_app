@@ -243,36 +243,44 @@ class _HomeScreenState extends State<HomeScreen> {
       
       _logger.info('🎓 Cooldown info updated with schedule awareness');
     } else {
-      // 🎓 NEW: Check if there's a cancelled state that needs schedule info
-      try {
-        final result = await _httpService.getTodayAttendance(studentId: widget.studentId);
-        if (result['success'] == true) {
-          final attendance = result['attendance'] as List;
-          
-          // Look for cancelled attendance
-          for (var record in attendance) {
-            if (record['status'] == 'cancelled') {
-              final cancelledTime = DateTime.parse(record['checkInTime']);
-              final now = DateTime.now();
-              
-              // 🎓 NEW: Add schedule-aware cancelled info
-              final cancelledInfo = ScheduleUtils.getScheduleAwareCancelledInfo(
-                cancelledTime: cancelledTime,
-                now: now,
-              );
-              
-              setState(() {
-                _cooldownInfo = cancelledInfo;
-                _currentClassId = record['classId'];
-              });
-              
-              _logger.info('🎓 Cancelled info updated with schedule awareness');
-              break;
+      // 🔴 FIX: Only check for cancelled records if we're actually in a cancelled state
+      // Don't override confirmed state by fetching old cancelled records from backend!
+      if (_beaconStatus.contains('Cancelled')) {
+        // 🎓 NEW: Check if there's a cancelled state that needs schedule info
+        try {
+          final result = await _httpService.getTodayAttendance(studentId: widget.studentId);
+          if (result['success'] == true) {
+            final attendance = result['attendance'] as List;
+            
+            // Look for cancelled attendance
+            for (var record in attendance) {
+              if (record['status'] == 'cancelled') {
+                final cancelledTime = DateTime.parse(record['checkInTime']);
+                final now = DateTime.now();
+                
+                // 🎓 NEW: Add schedule-aware cancelled info
+                final cancelledInfo = ScheduleUtils.getScheduleAwareCancelledInfo(
+                  cancelledTime: cancelledTime,
+                  now: now,
+                );
+                
+                setState(() {
+                  _cooldownInfo = cancelledInfo;
+                  _currentClassId = record['classId'];
+                });
+                
+                _logger.info('🎓 Cancelled info updated with schedule awareness');
+                break;
+              }
             }
           }
+        } catch (e) {
+          _logger.error('❌ Error loading cancelled state info', e);
         }
-      } catch (e) {
-        _logger.error('❌ Error loading cancelled state info', e);
+      } else {
+        // Not cancelled, no cooldown info from beacon service
+        // This is fine - just means no active cooldown
+        _logger.info('ℹ️ No cooldown or cancelled state to display');
       }
     }
   }
