@@ -56,7 +56,7 @@ class BeaconCooldownManager {
     }
     
     // Cooldown expired
-    _logger.i('✅ Cooldown expired (${minutesElapsed} minutes since last check-in)');
+    _logger.i('✅ Cooldown expired ($minutesElapsed minutes since last check-in)');
     return false;
   }
   

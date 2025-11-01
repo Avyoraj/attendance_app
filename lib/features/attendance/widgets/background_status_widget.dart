@@ -16,7 +16,7 @@ class BackgroundStatusWidget extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.check_circle,
                   color: Colors.green,
                   size: 28,
@@ -56,13 +56,13 @@ class BackgroundStatusWidget extends StatelessWidget {
                       Container(
                         width: 8,
                         height: 8,
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           color: Colors.green,
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Text(
+                      const Text(
                         'LIVE',
                         style: TextStyle(
                           fontSize: 11,

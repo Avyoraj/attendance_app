@@ -20,4 +20,19 @@ class SettingsProvider extends ChangeNotifier {
     _service.toggleNotificationEnabled(value);
     notifyListeners();
   }
+
+  void toggleSystemTheme(bool value) {
+    _service.toggleSystemTheme(value);
+    notifyListeners();
+  }
+
+  void toggleSoundEnabled(bool value) {
+    _service.toggleSoundEnabled(value);
+    notifyListeners();
+  }
+
+  void toggleVibrationEnabled(bool value) {
+    _service.toggleVibrationEnabled(value);
+    notifyListeners();
+  }
 }

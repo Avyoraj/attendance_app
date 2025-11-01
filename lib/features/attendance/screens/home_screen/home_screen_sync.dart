@@ -185,7 +185,7 @@ class HomeScreenSync {
     final currentRssi = rssiData['rssi'] as int?;
     final rssiAge = rssiData['ageSeconds'] as int?;
     final isInGracePeriod = rssiData['isInGracePeriod'] as bool? ?? false;
-    final threshold = AppConstants.confirmationRssiThreshold;
+    const threshold = AppConstants.confirmationRssiThreshold;
     
     print('📊 CONFIRMATION CHECK:');
     print('   - Raw RSSI: $currentRssi dBm ${isInGracePeriod ? "(⚠️ IN GRACE PERIOD)" : ""}');

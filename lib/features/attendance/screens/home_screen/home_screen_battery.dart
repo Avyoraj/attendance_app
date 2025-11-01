@@ -32,9 +32,12 @@ class HomeScreenBattery {
     // If we've already checked once this app session, use cached state
     if (HomeScreenState.hasCheckedBatteryOnce && 
         HomeScreenState.cachedBatteryCardState != null) {
-      setStateCallback(() {
-        state.showBatteryCard = HomeScreenState.cachedBatteryCardState!;
-      });
+      // Use cached state without triggering setState to prevent glitching
+      if (state.showBatteryCard != HomeScreenState.cachedBatteryCardState!) {
+        setStateCallback(() {
+          state.showBatteryCard = HomeScreenState.cachedBatteryCardState!;
+        });
+      }
       return;
     }
     
@@ -60,18 +63,31 @@ class HomeScreenBattery {
       final continuousService = ContinuousBeaconService();
       final isIgnoring = await continuousService.checkBatteryOptimization();
       
-      HomeScreenState.cachedBatteryCardState = !isIgnoring;
+      // If battery optimization is already disabled, don't show the card at all
+      if (isIgnoring) {
+        HomeScreenState.cachedBatteryCardState = false;
+        HomeScreenState.hasCheckedBatteryOnce = true;
+        await prefs.setBool('battery_card_dismissed', true);
+        
+        setStateCallback(() {
+          state.isBatteryOptimizationDisabled = true;
+          state.showBatteryCard = false;
+        });
+        return;
+      }
+      
+      // Battery optimization is NOT disabled, so show the card
+      // It will stay shown until user takes action (enable or dismiss)
+      HomeScreenState.cachedBatteryCardState = true;
       HomeScreenState.hasCheckedBatteryOnce = true;
       
-      setStateCallback(() {
-        state.isBatteryOptimizationDisabled = isIgnoring;
-        state.showBatteryCard = !isIgnoring; // Only show if not already disabled
-      });
+      // Small delay to prevent any visual glitching
+      await Future.delayed(const Duration(milliseconds: 100));
       
-      // If already disabled, remember that so we don't show card again
-      if (isIgnoring) {
-        await prefs.setBool('battery_card_dismissed', true);
-      }
+      setStateCallback(() {
+        state.isBatteryOptimizationDisabled = false;
+        state.showBatteryCard = true; // Show card and keep it shown
+      });
     } finally {
       state.isCheckingBatteryOptimization = false;
     }
@@ -132,6 +148,7 @@ class HomeScreenBattery {
   /// Build the battery optimization card widget
   Widget buildBatteryCard(BuildContext context) {
     return Card(
+      key: const ValueKey('battery_card'),
       color: Colors.blue.shade50,
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(

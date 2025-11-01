@@ -159,8 +159,6 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Student Login'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
       ),
       body: Padding(
         padding: const EdgeInsets.all(AppConstants.defaultPadding),

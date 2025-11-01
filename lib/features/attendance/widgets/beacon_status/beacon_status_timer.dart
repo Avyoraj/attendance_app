@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_constants.dart';
 import 'beacon_status_helpers.dart';
@@ -43,7 +42,7 @@ class BeaconStatusTimer extends StatelessWidget {
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
                   color: Colors.orange.shade700,
-                  fontFeatures: [const FontFeature.tabularFigures()],
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ],

@@ -38,7 +38,7 @@ class HomeScreenState {
   bool isCheckingIn = false;
   
   // Battery optimization state
-  bool showBatteryCard = true;
+  bool showBatteryCard = false; // Start hidden, show after check
   bool isBatteryOptimizationDisabled = false;
   bool isCheckingBatteryOptimization = false;
   

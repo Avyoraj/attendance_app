@@ -42,4 +42,19 @@ class SettingsService {
     _settings.notificationEnabled = value;
     // TODO: Persist change
   }
+
+  void toggleSystemTheme(bool value) {
+    _settings.systemTheme = value;
+    // TODO: Persist change
+  }
+
+  void toggleSoundEnabled(bool value) {
+    _settings.soundEnabled = value;
+    // TODO: Persist change
+  }
+
+  void toggleVibrationEnabled(bool value) {
+    _settings.vibrationEnabled = value;
+    // TODO: Persist change
+  }
 }

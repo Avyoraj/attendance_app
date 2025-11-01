@@ -33,19 +33,23 @@ class _MainNavigationState extends State<MainNavigation> {
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home),
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.history),
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
             label: 'History',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person),
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
             label: 'Profile',
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings),
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
             label: 'Settings',
           ),
         ],

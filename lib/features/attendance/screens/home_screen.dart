@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import '../widgets/beacon_status_widget.dart';
+import '../widgets/enhanced_beacon_status_widget.dart';
 import '../../../core/constants/app_constants.dart';
 import 'home_screen/home_screen_state.dart';
 import 'home_screen/home_screen_callbacks.dart';
@@ -202,8 +202,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Welcome, ${widget.studentId}'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -216,13 +214,13 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.all(AppConstants.defaultPadding),
         child: Column(
           children: [
-            // Battery optimization card (only if not disabled)
+            // Battery optimization card (static, only if not dismissed/enabled)
             if (_state.showBatteryCard)
               _battery.buildBatteryCard(context),
               
-            // Main beacon status widget
+            // Main beacon status widget - Material 3 Design
             Expanded(
-              child: BeaconStatusWidget(
+              child: Material3BeaconStatusWidget(
                 status: _state.beaconStatus,
                 isCheckingIn: _state.isCheckingIn,
                 studentId: widget.studentId,

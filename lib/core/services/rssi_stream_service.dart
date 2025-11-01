@@ -23,7 +23,7 @@ class RSSIStreamService {
   String? _activeStudentId;
   String? _activeClassId;
   DateTime? _sessionDate;
-  List<Map<String, dynamic>> _rssiBuffer = [];
+  final List<Map<String, dynamic>> _rssiBuffer = [];
   bool _isStreaming = false;
 
   /// Start RSSI streaming after check-in
@@ -169,7 +169,7 @@ class RSSIStreamService {
     
     // Fallback if no beacon detected - still feed it to maintain buffer
     _logger.w('⚠️ No beacon RSSI available, using default');
-    final fallbackRssi = -70;
+    const fallbackRssi = -70;
     beaconService.feedRssiSample(fallbackRssi);
     return fallbackRssi;
   }

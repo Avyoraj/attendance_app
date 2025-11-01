@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../../core/utils/schedule_utils.dart';
 import './home_screen_state.dart';
 import './home_screen_timers.dart';
 import './home_screen_helpers.dart';
