@@ -1,35 +1,40 @@
 import 'dart:async';
-import 'dart:math'; // For pow function
+// import 'dart:math'; // removed: no longer used
 import 'package:logger/logger.dart';
 import '../constants/app_constants.dart';
 import 'http_service.dart';
 import 'beacon_service.dart'; // For proximity verification
+import 'device_id_service.dart';
+import '../config/log_config.dart';
 
 /// Service for handling two-step attendance confirmation
 /// Step 1: Provisional check-in (immediate)
 /// Step 2: Confirmed check-in (after 10 minutes if still in range)
 class AttendanceConfirmationService {
-  static final AttendanceConfirmationService _instance = 
+  static final AttendanceConfirmationService _instance =
       AttendanceConfirmationService._internal();
   factory AttendanceConfirmationService() => _instance;
   AttendanceConfirmationService._internal();
 
   final _logger = Logger();
   final _httpService = HttpService();
-  
+
   // Lazy-initialized to avoid circular dependency with BeaconService
   BeaconService? _beaconService;
   BeaconService get beaconService {
     _beaconService ??= BeaconService();
     return _beaconService!;
   }
-  
+
   Timer? _confirmationTimer;
   String? _pendingAttendanceId;
   String? _pendingStudentId;
-  String? _pendingClassId;  // NEW: Store classId for confirmation
+  String? _pendingClassId; // NEW: Store classId for confirmation
   DateTime? _provisionalCheckInTime;
-  
+  // Track scheduling metadata to avoid accidental timer resets
+  DateTime? _scheduledAt;
+  Duration? _scheduledDelay;
+
   // Callback for confirmation success
   Function(String studentId, String classId)? onConfirmationSuccess;
   // Callback for confirmation failure
@@ -40,25 +45,69 @@ class AttendanceConfirmationService {
   void scheduleConfirmation({
     required String attendanceId,
     required String studentId,
-    required String classId,  // NEW: Required classId
+    required String classId, // NEW: Required classId
+    Duration? delayOverride, // NEW: Optional remaining time when resuming
   }) {
-    // Cancel any existing timer
-    cancelPendingConfirmation();
+    // If a confirmation is already pending, decide whether to keep or override
+    if (_confirmationTimer != null) {
+      final existingRemaining = _computeRemaining();
+
+      // If this call is a fresh scheduling (no override provided) and we already
+      // have a pending confirmation (likely resumed from sync), DO NOT reset
+      // the timer back to full duration.
+      if (delayOverride == null) {
+        _logger.i(
+            '⏸️ Existing pending confirmation detected; ignoring re-schedule without override (remaining: ${existingRemaining?.inSeconds ?? 'unknown'}s)');
+        return;
+      }
+
+      // If an override is provided (resume path), only override when the new
+      // remaining time is LESS than the existing remaining (i.e., tighter deadline).
+      if (existingRemaining != null && delayOverride >= existingRemaining) {
+        _logger.i(
+            '⏸️ Keeping existing confirmation timer (${existingRemaining.inSeconds}s) — override (${delayOverride.inSeconds}s) is not tighter');
+        return;
+      }
+
+      // Otherwise, cancel and re-schedule with the tighter override
+      cancelPendingConfirmation();
+    }
 
     _pendingAttendanceId = attendanceId;
     _pendingStudentId = studentId;
-    _pendingClassId = classId;  // NEW: Store classId
+    _pendingClassId = classId; // NEW: Store classId
     _provisionalCheckInTime = DateTime.now();
 
-    _logger.i('📅 Scheduled confirmation for $studentId in ${AppConstants.secondCheckDelay.inSeconds} seconds');
-    _logger.i('⏳ Will verify beacon proximity at END of timer (not continuously checking)');
+    // Decide actual delay (override for resume path)
+    Duration delay = AppConstants.secondCheckDelay;
+    if (delayOverride != null) {
+      // Sanitize override: clamp between 1s and configured delay
+      if (delayOverride <= Duration.zero) {
+        _logger.w(
+            '⚠️ delayOverride <= 0 supplied. Skipping scheduling & executing immediately.');
+        // Execute immediately (edge case: app resumed with almost no time left)
+        _executeConfirmation();
+        return;
+      }
+      if (delayOverride < delay) {
+        delay = delayOverride;
+      }
+    }
 
-    // Set timer for confirmation (60 seconds for testing, 10 minutes in production)
+    _logger.i(
+        '📅 Scheduled confirmation for $studentId in ${delay.inSeconds} seconds${delayOverride != null ? ' (resume override)' : ''}');
+    _logger.i(
+        '⏳ Will verify beacon proximity at END of timer (not continuously checking)');
+
     _confirmationTimer = Timer(
-      AppConstants.secondCheckDelay,
+      delay,
       () => _executeConfirmation(),
     );
-    
+
+  // Save scheduling metadata
+  _scheduledAt = DateTime.now();
+  _scheduledDelay = delay;
+
     // ❌ REMOVED: Continuous monitoring was too aggressive!
     // Student can move/sit/adjust position without losing attendance
     // We only check proximity at t=0 (check-in) and t=60 (confirmation)
@@ -75,45 +124,60 @@ class AttendanceConfirmationService {
     try {
       _logger.i('✅ Executing confirmation for $_pendingStudentId');
 
-      // 🔍 CRITICAL: Verify student is STILL in beacon range
-      final proximityCheck = await _verifyStudentProximity();
-      
-      if (!proximityCheck['inRange']) {
-        _logger.w('⚠️ Student out of range during confirmation - CANCELLING attendance');
-        _logger.w('   Reason: ${proximityCheck['reason']}');
-        _logger.w('   RSSI: ${proximityCheck['rssi']} dBm (Required: > -75 dBm)');
-        
-        // Cancel the provisional attendance (student left early)
+      // � Hard gate: require that a REAL beacon packet was seen very recently
+      // This prevents confirmations when the beacon is turned off or Bluetooth is disabled
+      final recentlyVisible = beaconService.wasBeaconSeenRecently(
+        maxAge: AppConstants.confirmationBeaconVisibilityMaxAge,
+      );
+      if (!recentlyVisible) {
+        _logger.w(
+            '⚠️ Beacon not recently visible (>${AppConstants.confirmationBeaconVisibilityMaxAge.inSeconds}s) — cancelling provisional');
         await _cancelProvisionalAttendance();
-        
-        // Notify failure
         if (onConfirmationFailure != null) {
           onConfirmationFailure!(_pendingStudentId!, _pendingClassId!);
         }
-        
         _clearPendingConfirmation();
         return;
       }
 
-      _logger.i('✅ Proximity verified - Student still in range (RSSI: ${proximityCheck['rssi']} dBm)');
+      // �🔍 CRITICAL: Run a short final proximity gate to avoid last-moment false positives
+      // We sample RAW RSSI for ~2 seconds and require at least two consecutive valid samples.
+      final gateOk = await _finalProximityGate(
+        windowSeconds: 2,
+        intervalMs: 300,
+      );
+      if (!gateOk) {
+        _logger.w('⚠️ Final proximity gate FAILED — cancelling provisional');
+        await _cancelProvisionalAttendance();
+        if (onConfirmationFailure != null) {
+          onConfirmationFailure!(_pendingStudentId!, _pendingClassId!);
+        }
+        _clearPendingConfirmation();
+        return;
+      }
+      _logger.i('✅ Final proximity gate PASSED');
 
-      // Call backend to confirm attendance
+      // Retrieve deviceId for confirmation integrity
+      final deviceId = await DeviceIdService().getDeviceId();
+
       final response = await _httpService.confirmAttendance(
         studentId: _pendingStudentId!,
         classId: _pendingClassId!,
+        deviceId: deviceId,
+        attendanceId: _pendingAttendanceId,
       );
 
       if (response['success'] == true) {
         _logger.i('🎉 Attendance confirmed successfully!');
-        
+
         // Notify via callback
         if (onConfirmationSuccess != null) {
           onConfirmationSuccess!(_pendingStudentId!, _pendingClassId!);
         }
-        
+
         // TODO: Show notification to user
         // await _showConfirmationNotification();
-        
+
         // TODO: Update local database status
         // await _updateLocalAttendanceStatus();
       } else {
@@ -138,64 +202,127 @@ class AttendanceConfirmationService {
   /// Returns: { inRange: bool, rssi: int, distance: double, reason: string }
   Future<Map<String, dynamic>> _verifyStudentProximity() async {
     try {
-      // Get current RSSI from BeaconService (use getter to avoid null)
-      final currentRssi = beaconService.getCurrentRssi();
-      
-      // Check if beacon is detected
-      if (currentRssi == null) {
+      // Use RAW RSSI (no grace-period fallback) for strict end-of-window validation
+      final raw = beaconService.getRawRssiData();
+      final rssi = raw['rssi'] as int?; // may be null
+      final ageSeconds = raw['ageSeconds'] as int?; // may be null
+      final inGrace = raw['isInGracePeriod'] as bool? ?? false;
+
+      // Failure: no beacon currently detected
+      if (rssi == null) {
         return {
           'inRange': false,
           'rssi': null,
-          'distance': null,
-          'reason': 'No beacon detected - student may have left classroom'
+          'ageSeconds': ageSeconds,
+          'inGrace': inGrace,
+          'reason': 'No beacon detected (rssi=null)'
         };
       }
-      
-      // 🎯 ENHANCED: Use lenient threshold for CONFIRMATION (allows movement)
-      // Entry requires -75 dBm, but staying only needs -82 dBm
-      if (currentRssi < AppConstants.confirmationRssiThreshold) {
-        final distance = _calculateDistance(currentRssi);
+
+      // Failure: stale reading
+      if (ageSeconds != null && ageSeconds > 3) {
         return {
           'inRange': false,
-          'rssi': currentRssi,
-          'distance': distance,
-          'reason': 'RSSI too weak ($currentRssi dBm) - student too far from beacon (Required: > ${AppConstants.confirmationRssiThreshold} dBm for confirmation)'
+          'rssi': rssi,
+          'ageSeconds': ageSeconds,
+          'inGrace': inGrace,
+          'reason': 'RSSI stale (age ${ageSeconds}s > 3s)'
         };
       }
-      
-      // All checks passed - student is in range
-      final distance = _calculateDistance(currentRssi);
+
+      // Failure: still in exit grace period (using cached good value)
+      if (inGrace) {
+        return {
+          'inRange': false,
+          'rssi': rssi,
+          'ageSeconds': ageSeconds,
+          'inGrace': inGrace,
+          'reason': 'In grace period fallback; treat as out-of-range'
+        };
+      }
+
+      // Failure: below confirmation threshold
+      if (rssi < AppConstants.confirmationRssiThreshold) {
+        return {
+          'inRange': false,
+          'rssi': rssi,
+          'ageSeconds': ageSeconds,
+          'inGrace': inGrace,
+          'reason': 'RSSI too weak ($rssi < ${AppConstants.confirmationRssiThreshold})'
+        };
+      }
+
+      // Pass
       return {
         'inRange': true,
-        'rssi': currentRssi,
-        'distance': distance,
-        'reason': 'Student in acceptable range'
+        'rssi': rssi,
+        'ageSeconds': ageSeconds,
+        'inGrace': inGrace,
+        'reason': 'OK'
       };
-      
     } catch (e) {
       _logger.e('❌ Error verifying proximity: $e');
       return {
         'inRange': false,
         'rssi': null,
-        'distance': null,
-        'reason': 'Error checking beacon proximity: $e'
+        'ageSeconds': null,
+        'inGrace': false,
+        'reason': 'Exception: $e'
       };
     }
   }
 
-  /// Calculate distance from RSSI
-  double _calculateDistance(int rssi) {
-    const int txPower = -59;
-    if (rssi == 0) return -1.0;
-    
-    final ratio = rssi * 1.0 / txPower;
-    if (ratio < 1.0) {
-      return pow(ratio, 10).toDouble();
-    } else {
-      final distance = (0.89976) * pow(ratio, 7.7095) + 0.111;
-      return distance;
+  /// Short gating window right at confirmation time.
+  /// Samples RAW RSSI repeatedly for [windowSeconds] at [intervalMs] and
+  /// requires either two consecutive valid samples or >=3 total passes.
+  Future<bool> _finalProximityGate({int windowSeconds = 2, int intervalMs = 300}) async {
+    _logger.i('🛂 Starting final proximity gate: ${windowSeconds}s');
+    final int ticks = (windowSeconds * 1000 ~/ intervalMs).clamp(1, 50);
+    int consecutivePass = 0;
+    int totalPass = 0;
+
+    for (int i = 0; i < ticks; i++) {
+      // Require that a REAL ranging packet was seen within the visibility window
+      final visible = beaconService.wasBeaconSeenRecently(
+        maxAge: AppConstants.confirmationBeaconVisibilityMaxAge,
+      );
+      if (!visible) {
+        consecutivePass = 0;
+        _logger.d('🛂 Gate miss ${i + 1}/$ticks (reason=Beacon not recently visible)');
+        await Future.delayed(Duration(milliseconds: intervalMs));
+        continue;
+      }
+
+      final check = await _verifyStudentProximity();
+      final inRange = (check['inRange'] as bool?) ?? false;
+      final age = check['ageSeconds'] as int?; // prefer very fresh samples
+      final fresh = age != null ? age <= 1 : false;
+
+      final pass = inRange && fresh && visible;
+      if (pass) {
+        consecutivePass += 1;
+        totalPass += 1;
+        if (LogConfig.verbose) {
+          _logger.d('🛂 Gate pass ${i + 1}/$ticks (rssi=${check['rssi']} age=${age}s, consec=$consecutivePass, total=$totalPass)');
+        }
+      } else {
+        consecutivePass = 0;
+        _logger.d('🛂 Gate miss ${i + 1}/$ticks (reason=${check['reason']}, age=$age)');
+      }
+
+      if (consecutivePass >= 2) {
+        _logger.i('🛂 Gate early PASS (2 consecutive)');
+        return true;
+      }
+      await Future.delayed(Duration(milliseconds: intervalMs));
     }
+
+    final ok = totalPass >= 3;
+    _logger.i('🛂 Gate ${ok ? 'PASS' : 'FAIL'} (totalPass=$totalPass/$ticks)');
+    return ok;
   }
+
+  // Note: distance calc removed (unused) to keep the service lean
 
   /// Cancel provisional attendance (student left before confirmation)
   Future<void> _cancelProvisionalAttendance() async {
@@ -205,13 +332,15 @@ class AttendanceConfirmationService {
 
     try {
       _logger.w('🚫 Cancelling provisional attendance for $_pendingStudentId');
-      
-      // Call backend to delete provisional attendance
+
+      // Call backend to delete provisional attendance (include deviceId for integrity)
+      final deviceId = await DeviceIdService().getDeviceId();
       await _httpService.cancelProvisionalAttendance(
         studentId: _pendingStudentId!,
         classId: _pendingClassId!,
+        deviceId: deviceId,
       );
-      
+
       _logger.i('✅ Provisional attendance cancelled successfully');
     } catch (e) {
       _logger.e('❌ Error cancelling provisional attendance: $e');
@@ -225,10 +354,12 @@ class AttendanceConfirmationService {
   }) async {
     try {
       _logger.i('👆 Manual confirmation triggered');
-      
+      final deviceId = await DeviceIdService().getDeviceId();
       final response = await _httpService.confirmAttendance(
         studentId: studentId,
         classId: classId,
+        deviceId: deviceId,
+        attendanceId: _pendingAttendanceId,
       );
 
       if (response['success'] == true) {
@@ -258,8 +389,10 @@ class AttendanceConfirmationService {
     _confirmationTimer?.cancel();
     _pendingAttendanceId = null;
     _pendingStudentId = null;
-    _pendingClassId = null;  // NEW: Clear classId
+    _pendingClassId = null; // NEW: Clear classId
     _provisionalCheckInTime = null;
+    _scheduledAt = null;
+    _scheduledDelay = null;
     _logger.i('🧹 Cleared pending confirmation state');
   }
 
@@ -275,7 +408,7 @@ class AttendanceConfirmationService {
     return {
       'attendanceId': _pendingAttendanceId,
       'studentId': _pendingStudentId,
-      'classId': _pendingClassId,  // NEW: Include classId
+      'classId': _pendingClassId, // NEW: Include classId
       'checkInTime': _provisionalCheckInTime?.toIso8601String(),
       'timeUntilConfirmation': AppConstants.secondCheckDelay.inMinutes,
     };
@@ -284,5 +417,15 @@ class AttendanceConfirmationService {
   /// Cleanup resources
   void dispose() {
     cancelPendingConfirmation();
+  }
+
+  /// Compute remaining time for the current scheduled confirmation
+  Duration? _computeRemaining() {
+    if (_confirmationTimer == null || _scheduledAt == null || _scheduledDelay == null) {
+      return null;
+    }
+    final elapsed = DateTime.now().difference(_scheduledAt!);
+    final remaining = _scheduledDelay! - elapsed;
+    return remaining.isNegative ? Duration.zero : remaining;
   }
 }

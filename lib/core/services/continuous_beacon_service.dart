@@ -9,16 +9,19 @@ import 'connectivity_service.dart';
 import 'sync_service.dart';
 import 'http_service.dart';
 import '../constants/api_constants.dart';
+import 'device_id_service.dart';
 
 /// Continuous foreground beacon scanning service
 /// Works exactly like the home screen scanning but runs in background
 class ContinuousBeaconService {
-  static final ContinuousBeaconService _instance = ContinuousBeaconService._internal();
+  static final ContinuousBeaconService _instance =
+      ContinuousBeaconService._internal();
   factory ContinuousBeaconService() => _instance;
   ContinuousBeaconService._internal();
 
-  static const platform = MethodChannel('com.example.attendance_app/beacon_service');
-  
+  static const platform =
+      MethodChannel('com.example.attendance_app/beacon_service');
+
   final LoggerService _logger = LoggerService();
   final LocalDatabaseService _db = LocalDatabaseService();
   final ConnectivityService _connectivity = ConnectivityService();
@@ -29,13 +32,14 @@ class ContinuousBeaconService {
   bool _isScanning = false;
   String? _currentStudentId;
   DateTime? _lastAttendanceTime;
-  
+
   bool get isScanning => _isScanning;
 
   /// Check if battery optimization is disabled
   Future<bool> checkBatteryOptimization() async {
     try {
-      final result = await platform.invokeMethod('isIgnoringBatteryOptimizations');
+      final result =
+          await platform.invokeMethod('isIgnoringBatteryOptimizations');
       return result as bool? ?? false;
     } catch (e) {
       _logger.warning('Failed to check battery optimization: $e');
@@ -61,6 +65,7 @@ class ContinuousBeaconService {
       _logger.error('Failed to open battery optimization settings', e);
     }
   }
+
   /// Start continuous beacon scanning with foreground service
   Future<void> startContinuousScanning() async {
     if (_isScanning) {
@@ -84,7 +89,7 @@ class ContinuousBeaconService {
 
       // Initialize beacon scanning
       await flutterBeacon.initializeScanning;
-      
+
       final regions = <Region>[
         Region(
           identifier: AppConstants.schoolIdentifier,
@@ -101,8 +106,8 @@ class ContinuousBeaconService {
       );
 
       _isScanning = true;
-      _logger.info('🔍 Continuous beacon scanning started (same as home screen)');
-      
+      _logger
+          .info('🔍 Continuous beacon scanning started (same as home screen)');
     } catch (e, stackTrace) {
       _logger.error('Failed to start continuous scanning', e, stackTrace);
       rethrow;
@@ -123,7 +128,6 @@ class ContinuousBeaconService {
 
       _isScanning = false;
       _logger.info('⏹️ Continuous scanning stopped');
-      
     } catch (e, stackTrace) {
       _logger.error('Failed to stop continuous scanning', e, stackTrace);
     }
@@ -134,7 +138,8 @@ class ContinuousBeaconService {
     // Always update notification - even if no beacons
     if (result.beacons.isEmpty) {
       await platform.invokeMethod('updateNotification', {
-        'text': '🔍 Searching for beacons... (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')})'
+        'text':
+            '🔍 Searching for beacons... (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')})'
       });
       return;
     }
@@ -146,52 +151,62 @@ class ContinuousBeaconService {
       final distance = _calculateDistance(rssi, beacon.txPower ?? -59);
 
       _logger.beaconDetected(classId, rssi, distance);
-      
+
       // ALWAYS update notification to show beacon detected
-      print('🔔 Beacon detected, updating notification: $classId, RSSI: $rssi');
+      _logger.debug(
+          '🔔 Beacon detected, updating notification: $classId, RSSI: $rssi');
       await platform.invokeMethod('updateNotification', {
-        'text': '📍 Found $classId | RSSI: $rssi | ${distance.toStringAsFixed(1)}m'
+        'text':
+            '📍 Found $classId | RSSI: $rssi | ${distance.toStringAsFixed(1)}m'
       });
-      print('✅ Notification update called');
+      _logger.debug('✅ Notification update called');
 
       // Check if in range for attendance (RSSI > -75 dBm)
       if (rssi > AppConstants.rssiThreshold) {
-        print('✅ RSSI good ($rssi > ${AppConstants.rssiThreshold}), recording attendance...');
+        _logger.debug(
+            '✅ RSSI good ($rssi > ${AppConstants.rssiThreshold}), recording attendance...');
         await _recordAttendance(classId, rssi, distance);
       } else {
         // Show why attendance not recorded
-        print('⚠️ RSSI too weak ($rssi <= ${AppConstants.rssiThreshold})');
+        _logger.warning(
+            '⚠️ RSSI too weak ($rssi <= ${AppConstants.rssiThreshold})');
         await platform.invokeMethod('updateNotification', {
-          'text': '⚠️ $classId too far (RSSI: $rssi, need > ${AppConstants.rssiThreshold})'
+          'text':
+              '⚠️ $classId too far (RSSI: $rssi, need > ${AppConstants.rssiThreshold})'
         });
       }
     } catch (e, stackTrace) {
       _logger.error('Error handling beacon result', e, stackTrace);
-      print('❌ Error in _handleBeaconResult: $e');
+      _logger.error('❌ Error in _handleBeaconResult', e, stackTrace);
     }
   }
 
   /// Record attendance (same logic as home screen)
-  Future<void> _recordAttendance(String classId, int rssi, double distance) async {
+  Future<void> _recordAttendance(
+      String classId, int rssi, double distance) async {
     if (_currentStudentId == null) return;
 
     try {
       // Check if already recorded today
       if (_lastAttendanceTime != null) {
-        final timeSinceLastLog = DateTime.now().difference(_lastAttendanceTime!);
+        final timeSinceLastLog =
+            DateTime.now().difference(_lastAttendanceTime!);
         if (timeSinceLastLog.inMinutes < 30) {
-          _logger.debug('Attendance already recorded recently (${timeSinceLastLog.inMinutes} minutes ago), skipping');
-          
+          _logger.debug(
+              'Attendance already recorded recently (${timeSinceLastLog.inMinutes} minutes ago), skipping');
+
           // Show cooldown message
           await platform.invokeMethod('updateNotification', {
-            'text': '⏳ Already logged $classId (${timeSinceLastLog.inMinutes}m ago, wait ${30 - timeSinceLastLog.inMinutes}m)'
+            'text':
+                '⏳ Already logged $classId (${timeSinceLastLog.inMinutes}m ago, wait ${30 - timeSinceLastLog.inMinutes}m)'
           });
           return;
         }
       }
 
-      _logger.info('📝 Recording attendance: $classId (RSSI: $rssi, Distance: ${distance.toStringAsFixed(2)}m)');
-      print('🔔 RECORDING ATTENDANCE FOR: $classId'); // DEBUG
+      _logger.info(
+          '📝 Recording attendance: $classId (RSSI: $rssi, Distance: ${distance.toStringAsFixed(2)}m)');
+      _logger.debug('🔔 RECORDING ATTENDANCE FOR: $classId');
 
       // Check internet connectivity
       await _connectivity.initialize();
@@ -200,27 +215,31 @@ class ContinuousBeaconService {
       if (isOnline) {
         // Try to send directly to server
         try {
+          final deviceId = await DeviceIdService().getDeviceId();
           final response = await _http.post(
-            url: ApiConstants.checkInEndpoint,
+            url: ApiConstants.checkIn,
             body: {
               'studentId': _currentStudentId!,
               'classId': classId,
               'timestamp': DateTime.now().toIso8601String(),
               'rssi': rssi,
               'distance': distance,
+              'deviceId': deviceId,
             },
           );
 
           if (response.statusCode == 200 || response.statusCode == 201) {
             _logger.info('✅ Attendance recorded successfully on server');
             _lastAttendanceTime = DateTime.now();
-            
+
             // UPDATE foreground service notification to show success
-            print('🔔 Updating foreground notification with success message');
+            _logger.debug(
+                '🔔 Updating foreground notification with success message');
             await platform.invokeMethod('updateNotification', {
-              'text': '✅ Attendance logged for $classId at ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}'
+              'text':
+                  '✅ Attendance logged for $classId at ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}'
             });
-            
+
             return;
           }
         } catch (e) {
@@ -238,18 +257,19 @@ class ContinuousBeaconService {
 
       _lastAttendanceTime = DateTime.now();
       _logger.info('💾 Attendance saved locally');
-      
+
       // UPDATE foreground service notification to show success (offline)
-      print('🔔 Updating foreground notification with offline success message');
+      _logger.debug(
+          '🔔 Updating foreground notification with offline success message');
       await platform.invokeMethod('updateNotification', {
-        'text': '✅ Attendance logged for $classId (offline) at ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}'
+        'text':
+            '✅ Attendance logged for $classId (offline) at ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}'
       });
-      
+
       // Try to sync immediately
       if (isOnline) {
         await _sync.syncPendingRecords();
       }
-      
     } catch (e, stackTrace) {
       _logger.error('Failed to record attendance', e, stackTrace);
     }
@@ -258,12 +278,14 @@ class ContinuousBeaconService {
   /// Calculate distance from RSSI
   double _calculateDistance(int rssi, int txPower) {
     if (rssi == 0) return -1.0;
-    
+
     final ratio = rssi * 1.0 / txPower;
     if (ratio < 1.0) {
       return ratio * 10;
     } else {
-      final accuracy = (0.89976) * (ratio * ratio * ratio * ratio * ratio * ratio * ratio) + 0.111;
+      final accuracy =
+          (0.89976) * (ratio * ratio * ratio * ratio * ratio * ratio * ratio) +
+              0.111;
       return accuracy;
     }
   }

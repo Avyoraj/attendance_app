@@ -1,4 +1,5 @@
 import 'package:permission_handler/permission_handler.dart';
+import 'package:attendance_app/core/utils/app_logger.dart';
 
 class PermissionService {
   static final PermissionService _instance = PermissionService._internal();
@@ -13,9 +14,11 @@ class PermissionService {
     ].request();
 
     // Log the permission statuses for debugging
-    print('Location status: ${statuses[Permission.location]}');
-    print('Bluetooth Scan status: ${statuses[Permission.bluetoothScan]}');
-    print('Bluetooth Connect status: ${statuses[Permission.bluetoothConnect]}');
+    AppLogger.debug('Location status: ${statuses[Permission.location]}');
+    AppLogger.debug(
+        'Bluetooth Scan status: ${statuses[Permission.bluetoothScan]}');
+    AppLogger.debug(
+        'Bluetooth Connect status: ${statuses[Permission.bluetoothConnect]}');
 
     return statuses;
   }
@@ -27,7 +30,8 @@ class PermissionService {
       Permission.bluetoothConnect,
     ].request();
 
-    return statuses.values.every((status) => status == PermissionStatus.granted);
+    return statuses.values
+        .every((status) => status == PermissionStatus.granted);
   }
 
   Future<PermissionStatus> getLocationPermissionStatus() async {
@@ -46,20 +50,21 @@ class PermissionService {
   /// Returns true if permission is granted
   Future<bool> requestNotificationPermission() async {
     if (await Permission.notification.isGranted) {
-      print('Notification permission already granted');
+      AppLogger.debug('Notification permission already granted');
       return true;
     }
 
     final status = await Permission.notification.request();
-    print('Notification permission status: $status');
+    AppLogger.debug('Notification permission status: $status');
 
     if (status.isDenied) {
-      print('Notification permission denied by user');
+      AppLogger.warning('Notification permission denied by user');
       return false;
     }
 
     if (status.isPermanentlyDenied) {
-      print('Notification permission permanently denied. Opening app settings...');
+      AppLogger.warning(
+          'Notification permission permanently denied. Opening app settings...');
       await openAppSettings();
       return false;
     }

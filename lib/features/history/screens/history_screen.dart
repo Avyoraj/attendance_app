@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/attendance_service.dart';
+import '../../../core/services/storage_service.dart';
 import '../../../models/attendance_record.dart';
 import '../widgets/attendance_history_list.dart';
 
@@ -31,15 +32,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
         _error = null;
       });
 
-      // Replace with actual studentId from auth context if available
-      const studentId = '123456';
+      final storage = await StorageService.getInstance();
+      final studentId = await storage.getStudentId();
+
+      if (studentId == null || studentId.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _error = 'No student is currently logged in.';
+          _isLoading = false;
+        });
+        return;
+      }
+
       final records = await AttendanceService().getAttendanceHistory(studentId);
-      
+      if (!mounted) return;
       setState(() {
         _records = records;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -50,7 +62,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Attendance History'),
@@ -94,8 +106,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
           Text(
             'Loading attendance history...',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
+                  color: colorScheme.onSurfaceVariant,
+                ),
           ),
         ],
       ),
@@ -126,16 +138,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
             Text(
               'Unable to load history',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: colorScheme.onSurface,
-              ),
+                    color: colorScheme.onSurface,
+                  ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              _error ?? 'An error occurred while loading your attendance history',
+              _error ??
+                  'An error occurred while loading your attendance history',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
+                    color: colorScheme.onSurfaceVariant,
+                  ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -174,16 +187,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
             Text(
               'No attendance records',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: colorScheme.onSurface,
-              ),
+                    color: colorScheme.onSurface,
+                  ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               'Your attendance history will appear here once you start checking in to classes.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
+                    color: colorScheme.onSurfaceVariant,
+                  ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -213,7 +226,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               child: _buildSummaryCard(colorScheme),
             ),
           ),
-          
+
           // History List
           SliverToBoxAdapter(
             child: Padding(
@@ -221,12 +234,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
               child: Text(
                 'Recent Records',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: colorScheme.onSurface,
-                ),
+                      color: colorScheme.onSurface,
+                    ),
               ),
             ),
           ),
-          
+
           SliverPadding(
             padding: const EdgeInsets.all(16),
             sliver: AttendanceHistoryList(records: _records),
@@ -238,9 +251,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Widget _buildSummaryCard(ColorScheme colorScheme) {
     final totalRecords = _records.length;
-    final confirmedRecords = _records.where((r) => r.status == 'confirmed').length;
-    final cancelledRecords = _records.where((r) => r.status == 'cancelled').length;
-    
+    final confirmedRecords =
+        _records.where((r) => r.status == 'confirmed').length;
+    final cancelledRecords =
+        _records.where((r) => r.status == 'cancelled').length;
+
     return Card(
       elevation: 1,
       child: Padding(
@@ -259,8 +274,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 Text(
                   'Summary',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
+                        color: colorScheme.onSurface,
+                      ),
                 ),
               ],
             ),
@@ -299,9 +314,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildStatItem(String label, String value, IconData icon, Color color) {
+  Widget _buildStatItem(
+      String label, String value, IconData icon, Color color) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Column(
       children: [
         Container(
@@ -321,15 +337,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
         Text(
           value,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            color: colorScheme.onSurface,
-            fontWeight: FontWeight.bold,
-          ),
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.bold,
+              ),
         ),
         Text(
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-          ),
+                color: colorScheme.onSurfaceVariant,
+              ),
         ),
       ],
     );

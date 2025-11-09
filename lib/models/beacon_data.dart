@@ -53,10 +53,10 @@ class BeaconData {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is BeaconData && 
-           other.proximityUUID == proximityUUID &&
-           other.major == major &&
-           other.minor == minor;
+    return other is BeaconData &&
+        other.proximityUUID == proximityUUID &&
+        other.major == major &&
+        other.minor == minor;
   }
 
   @override

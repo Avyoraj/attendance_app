@@ -4,6 +4,7 @@ import 'theme/app_theme.dart';
 
 import 'package:provider/provider.dart';
 import '../core/providers/settings_provider.dart';
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:attendance_app/features/attendance/screens/home_screen/home_screen_state.dart';
 
 /// Material 3 Beacon Status Widget
 /// Follows Material 3 design principles with proper elevation,
 /// color tokens, and component styling
 class Material3BeaconStatusWidget extends StatefulWidget {
-  final String status;
+  final String statusMessage;
+  final BeaconStatusType statusType;
   final bool isCheckingIn;
   final String studentId;
   final int? remainingSeconds;
@@ -14,7 +16,8 @@ class Material3BeaconStatusWidget extends StatefulWidget {
 
   const Material3BeaconStatusWidget({
     super.key,
-    required this.status,
+    required this.statusMessage,
+    required this.statusType,
     required this.isCheckingIn,
     required this.studentId,
     this.remainingSeconds,
@@ -24,11 +27,12 @@ class Material3BeaconStatusWidget extends StatefulWidget {
   });
 
   @override
-  State<Material3BeaconStatusWidget> createState() => _Material3BeaconStatusWidgetState();
+  State<Material3BeaconStatusWidget> createState() =>
+      _Material3BeaconStatusWidgetState();
 }
 
-class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidget>
-    with TickerProviderStateMixin {
+class _Material3BeaconStatusWidgetState
+    extends State<Material3BeaconStatusWidget> with TickerProviderStateMixin {
   late AnimationController _pulseController;
   late AnimationController _fadeController;
   late Animation<double> _pulseAnimation;
@@ -37,12 +41,12 @@ class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidge
   @override
   void initState() {
     super.initState();
-    
+
     _pulseController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
     );
-    
+
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -65,7 +69,7 @@ class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidge
     ));
 
     _fadeController.forward();
-    
+
     if (widget.isCheckingIn || widget.isAwaitingConfirmation) {
       _pulseController.repeat(reverse: true);
     }
@@ -81,7 +85,7 @@ class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidge
   @override
   void didUpdateWidget(Material3BeaconStatusWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     if (widget.isCheckingIn || widget.isAwaitingConfirmation) {
       _pulseController.repeat(reverse: true);
     } else {
@@ -92,7 +96,7 @@ class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidge
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return FadeTransition(
       opacity: _fadeAnimation,
       child: Center(
@@ -167,26 +171,40 @@ class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidge
             Text(
               _getStatusTitle(),
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: _getStatusColor(colorScheme),
-              ),
+                    color: _getStatusColor(colorScheme),
+                  ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
 
-            // Status Description
+            // Primary status message from state
             Text(
-              _getStatusDescription(),
+              widget.statusMessage,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
               textAlign: TextAlign.center,
             ),
+
+            // Optional supporting description
+            if (_getStatusSupportText() != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _getStatusSupportText()!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+            ],
             const SizedBox(height: 20),
 
             // Timer or Additional Info
             if (widget.remainingSeconds != null && widget.remainingSeconds! > 0)
               _buildMaterial3TimerWidget(colorScheme),
-            
+
             if (widget.cooldownInfo != null)
               _buildMaterial3CooldownWidget(colorScheme),
           ],
@@ -223,15 +241,15 @@ class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidge
                   Text(
                     'Student ID',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     widget.studentId,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: colorScheme.onSurface,
-                    ),
+                          color: colorScheme.onSurface,
+                        ),
                   ),
                 ],
               ),
@@ -261,8 +279,8 @@ class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidge
                 Text(
                   'Instructions',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
+                        color: colorScheme.onSurface,
+                      ),
                 ),
               ],
             ),
@@ -270,9 +288,9 @@ class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidge
             Text(
               _getInstructionsText(),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                height: 1.5,
-              ),
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.5,
+                  ),
             ),
           ],
         ),
@@ -281,10 +299,11 @@ class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidge
   }
 
   Widget _buildMaterial3TimerWidget(ColorScheme colorScheme) {
+    final formatted = _formatDuration(widget.remainingSeconds!);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: colorScheme.errorContainer,
+        color: colorScheme.secondaryContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -292,14 +311,15 @@ class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidge
         children: [
           Icon(
             Icons.timer_outlined,
-            color: colorScheme.onErrorContainer,
+            color: colorScheme.onSecondaryContainer,
             size: 20,
           ),
           const SizedBox(width: 8),
           Text(
-            '${widget.remainingSeconds}s remaining',
+            'Confirmation window: $formatted',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onErrorContainer,
+              color: colorScheme.onSecondaryContainer,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],
@@ -327,8 +347,8 @@ class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidge
           Text(
             'Cooldown: ${cooldownInfo['remainingTime'] ?? 'Active'}',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
+                  color: colorScheme.onSurfaceVariant,
+                ),
           ),
         ],
       ),
@@ -337,111 +357,132 @@ class _Material3BeaconStatusWidgetState extends State<Material3BeaconStatusWidge
 
   // Helper methods for status-based styling
   Color _getStatusColor(ColorScheme colorScheme) {
-    switch (widget.status.toLowerCase()) {
-      case 'scanning':
+    switch (widget.statusType) {
+      case BeaconStatusType.scanning:
         return colorScheme.primary;
-      case 'provisional_check_in':
+      case BeaconStatusType.provisional:
         return colorScheme.tertiary;
-      case 'confirming':
+      case BeaconStatusType.confirming:
         return colorScheme.secondary;
-      case 'confirmed':
-      case 'attendance_success':
+      case BeaconStatusType.confirmed:
+      case BeaconStatusType.success:
         return colorScheme.primary;
-      case 'cancelled':
-      case 'check_in_failed':
+      case BeaconStatusType.cancelled:
+      case BeaconStatusType.failed:
+      case BeaconStatusType.deviceLocked:
         return colorScheme.error;
-      case 'cooldown':
+      case BeaconStatusType.cooldown:
         return colorScheme.outline;
-      case 'device_locked':
-        return colorScheme.error;
-      default:
+      case BeaconStatusType.info:
         return colorScheme.primary;
     }
   }
 
   IconData _getStatusIcon() {
-    switch (widget.status.toLowerCase()) {
-      case 'scanning':
+    switch (widget.statusType) {
+      case BeaconStatusType.scanning:
         return Icons.radar;
-      case 'provisional_check_in':
-        return Icons.hourglass_empty;
-      case 'confirming':
-        return Icons.timer;
-      case 'confirmed':
-      case 'attendance_success':
+      case BeaconStatusType.provisional:
+        return Icons.hourglass_bottom;
+      case BeaconStatusType.confirming:
+        return Icons.task_alt;
+      case BeaconStatusType.confirmed:
+      case BeaconStatusType.success:
         return Icons.check_circle;
-      case 'cancelled':
-        return Icons.cancel;
-      case 'check_in_failed':
-        return Icons.error;
-      case 'cooldown':
+      case BeaconStatusType.cancelled:
+        return Icons.cancel_outlined;
+      case BeaconStatusType.failed:
+        return Icons.error_outline;
+      case BeaconStatusType.cooldown:
         return Icons.schedule;
-      case 'device_locked':
-        return Icons.lock;
-      default:
+      case BeaconStatusType.deviceLocked:
+        return Icons.lock_outline;
+      case BeaconStatusType.info:
         return Icons.bluetooth_searching;
     }
   }
 
   String _getStatusTitle() {
-    switch (widget.status.toLowerCase()) {
-      case 'scanning':
+    switch (widget.statusType) {
+      case BeaconStatusType.scanning:
         return 'Scanning for Beacons';
-      case 'provisional_check_in':
-        return 'Check-in Initiated';
-      case 'confirming':
-        return 'Confirming Attendance';
-      case 'confirmed':
+      case BeaconStatusType.provisional:
+        return 'Stay Nearby to Confirm';
+      case BeaconStatusType.confirming:
+        return 'Finalizing Your Check-in';
+      case BeaconStatusType.confirmed:
         return 'Attendance Confirmed';
-      case 'attendance_success':
-        return 'Success!';
-      case 'cancelled':
-        return 'Check-in Cancelled';
-      case 'check_in_failed':
+      case BeaconStatusType.success:
+        return 'Attendance Recorded';
+      case BeaconStatusType.cancelled:
+        return 'Attendance Cancelled';
+      case BeaconStatusType.failed:
         return 'Check-in Failed';
-      case 'cooldown':
-        return 'Cooldown Active';
-      case 'device_locked':
+      case BeaconStatusType.cooldown:
+        return 'Already Checked In';
+      case BeaconStatusType.deviceLocked:
         return 'Device Locked';
-      default:
-        return widget.status;
+      case BeaconStatusType.info:
+        return 'Attendance Status';
     }
   }
 
-  String _getStatusDescription() {
-    switch (widget.status.toLowerCase()) {
-      case 'scanning':
-        return 'Looking for nearby classroom beacons...';
-      case 'provisional_check_in':
-        return 'Please stay in the classroom for confirmation';
-      case 'confirming':
-        return 'Verifying your presence in the classroom';
-      case 'confirmed':
-        return 'Your attendance has been successfully recorded';
-      case 'attendance_success':
-        return 'Great! You\'re all set for today';
-      case 'cancelled':
-        return 'Check-in was cancelled. You may try again';
-      case 'check_in_failed':
-        return 'Unable to complete check-in. Please try again';
-      case 'cooldown':
-        return 'You\'ve already checked in for this class';
-      case 'device_locked':
-        return 'This device is registered to another student';
-      default:
-        return 'Please wait...';
+  String? _getStatusSupportText() {
+    switch (widget.statusType) {
+      case BeaconStatusType.scanning:
+        return 'Keep Bluetooth on and stay near your classroom beacon.';
+      case BeaconStatusType.provisional:
+        return 'You are in a provisional window. Remaining near the beacon confirms attendance automatically.';
+      case BeaconStatusType.confirming:
+        return 'We are double-checking your final signal strength before recording attendance.';
+      case BeaconStatusType.confirmed:
+        return 'Feel free to continue with your class. You can revisit the app anytime.';
+      case BeaconStatusType.success:
+        return 'Attendance has been logged successfully.';
+      case BeaconStatusType.cancelled:
+        return 'You can retry once you are back in range of the classroom beacon.';
+      case BeaconStatusType.failed:
+        return 'Move closer to the classroom beacon and try again.';
+      case BeaconStatusType.cooldown:
+        return 'The next automatic check-in becomes available once the cooldown completes.';
+      case BeaconStatusType.deviceLocked:
+        return 'If this is unexpected, contact your administrator to relink your device.';
+      case BeaconStatusType.info:
+        return null;
     }
   }
 
   String _getInstructionsText() {
-    if (widget.isCheckingIn || widget.isAwaitingConfirmation) {
-      return 'Please keep your phone with you and stay in the classroom until attendance is confirmed.';
-    } else if (widget.status.toLowerCase() == 'scanning') {
-      return 'Make sure Bluetooth is enabled and you\'re near a classroom beacon. The app will automatically detect your presence.';
-    } else if (widget.status.toLowerCase() == 'cooldown') {
-      return 'You\'ve already checked in for this class. The cooldown will reset when the class ends or for the next scheduled class.';
-    } else {
-      return 'Keep your phone with you and ensure Bluetooth is enabled for automatic attendance tracking.';
+    switch (widget.statusType) {
+      case BeaconStatusType.provisional:
+        return 'Stay within the classroom for the duration of the countdown so we can finalize your attendance.';
+      case BeaconStatusType.confirming:
+        return 'Hold on for a moment—your presence is being verified before the timer ends.';
+      case BeaconStatusType.confirmed:
+      case BeaconStatusType.success:
+        return 'You are marked present. If you leave early, the cooldown ensures duplicate check-ins are prevented.';
+      case BeaconStatusType.cancelled:
+      case BeaconStatusType.failed:
+        return 'Head back near the classroom beacon and the app will attempt the check-in again automatically.';
+      case BeaconStatusType.cooldown:
+        return 'Relax—you are already checked in. We will let you know when the next attendance window opens.';
+      case BeaconStatusType.deviceLocked:
+        return 'This account is linked to another device. Please reach out to support if this is a mistake.';
+      case BeaconStatusType.scanning:
+        return 'Keep Bluetooth enabled and hold your device near the classroom entry. We will start the check-in once the beacon is detected.';
+      case BeaconStatusType.info:
+        return 'Keep your phone with you and ensure Bluetooth stays on for uninterrupted attendance tracking.';
     }
+  }
+
+  String _formatDuration(int seconds) {
+    final duration = Duration(seconds: seconds);
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final secs = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    final hours = duration.inHours;
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:$minutes:$secs';
+    }
+    return '$minutes:$secs';
   }
 }

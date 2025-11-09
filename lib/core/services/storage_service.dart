@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:attendance_app/core/utils/app_logger.dart';
 import '../constants/app_constants.dart';
 
 class StorageService {
@@ -19,7 +20,9 @@ class StorageService {
   }
 
   Future<bool> setStudentId(String studentId) async {
-    return await _preferences?.setString(AppConstants.studentIdKey, studentId) ?? false;
+    return await _preferences?.setString(
+            AppConstants.studentIdKey, studentId) ??
+        false;
   }
 
   Future<bool> removeStudentId() async {
@@ -49,15 +52,15 @@ class StorageService {
       // Remove attendance-related keys but NOT device_id or student_id
       final keys = _preferences?.getKeys() ?? {};
       for (final key in keys) {
-        if (key.startsWith('attendance_') || 
-            key == 'attendance_records' || 
+        if (key.startsWith('attendance_') ||
+            key == 'attendance_records' ||
             key == 'last_check_in') {
           await _preferences?.remove(key);
         }
       }
       return true;
     } catch (e) {
-      print('Error clearing attendance data: $e');
+      AppLogger.error('Error clearing attendance data', error: e);
       return false;
     }
   }

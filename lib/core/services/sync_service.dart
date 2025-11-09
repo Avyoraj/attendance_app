@@ -5,6 +5,7 @@ import 'http_service.dart';
 import 'logger_service.dart';
 import 'alert_service.dart';
 import '../constants/api_constants.dart';
+import 'device_id_service.dart';
 
 /// Service to sync local attendance records with backend
 /// Automatically syncs when internet becomes available
@@ -67,19 +68,21 @@ class SyncService {
     int syncedCount = 0;
 
     try {
-      final pendingRecords = await _localDb.getUnsyncedRecords();
-      
-      if (pendingRecords.isEmpty) {
-        _logger.debug('No pending records to sync');
+  final pendingRecords = await _localDb.getUnsyncedRecords();
+  final pendingActions = await _localDb.getPendingActions();
+
+      if (pendingRecords.isEmpty && pendingActions.isEmpty) {
+        _logger.debug('No pending attendance or actions to sync');
         return 0;
       }
 
-      _logger.info('🔄 Starting sync of ${pendingRecords.length} records');
+      _logger.info('🔄 Starting sync: ${pendingRecords.length} attendance records, ${pendingActions.length} actions');
 
-      for (final record in pendingRecords) {
+  // First push attendance records
+  for (final record in pendingRecords) {
         try {
           final success = await _syncSingleRecord(record);
-          
+
           if (success) {
             await _localDb.markAsSynced(record['id'] as int);
             syncedCount++;
@@ -89,24 +92,45 @@ class SyncService {
             // Stop syncing if we get errors (might be server issue)
             break;
           }
-          
+
           // Small delay between requests to avoid overwhelming server
           await Future.delayed(const Duration(milliseconds: 500));
-          
         } catch (e, stackTrace) {
           _logger.error('Error syncing record ${record['id']}', e, stackTrace);
           break; // Stop on error
         }
       }
 
+      // Then process confirmation/cancellation actions
+      for (final action in pendingActions) {
+        if (!_connectivityService.isOnline) break;
+        final id = action['id'] as int;
+        final type = action['action_type'] as String;
+        final studentId = action['student_id'] as String;
+        final classId = action['class_id'] as String;
+
+        final success = await _processAction(
+          id: id,
+          type: type,
+          studentId: studentId,
+          classId: classId,
+        );
+
+        if (!success) {
+          _logger.warning('✗ Failed processing action $id ($type)');
+          break;
+        }
+
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
+
       if (syncedCount > 0) {
         _logger.info('✅ Successfully synced $syncedCount records');
         await _alertService.showAttendanceSyncedNotification(syncedCount);
-        
+
         // Cleanup old synced records
         await _localDb.cleanupOldRecords();
       }
-
     } catch (e, stackTrace) {
       _logger.error('Error during sync process', e, stackTrace);
     } finally {
@@ -116,16 +140,59 @@ class SyncService {
     return syncedCount;
   }
 
+  Future<bool> _processAction({
+    required int id,
+    required String type,
+    required String studentId,
+    required String classId,
+  }) async {
+    try {
+      bool success = false;
+      if (type == 'confirm') {
+        final deviceId = await DeviceIdService().getDeviceId();
+        final result = await _httpService.confirmAttendance(
+          studentId: studentId,
+          classId: classId,
+          deviceId: deviceId,
+        );
+        success = result['success'] == true;
+      } else if (type == 'cancel') {
+        final deviceId = await DeviceIdService().getDeviceId();
+        final result = await _httpService.cancelProvisionalAttendance(
+          studentId: studentId,
+          classId: classId,
+          deviceId: deviceId,
+        );
+        success = result['success'] == true;
+      } else {
+        _logger.warning('Unknown action type: $type');
+        return false;
+      }
+
+      if (success) {
+        await _localDb.markActionProcessed(id);
+        _logger.debug('✓ Processed action $id ($type)');
+        return true;
+      }
+      return false;
+    } catch (e, stackTrace) {
+      _logger.error('Error processing action $id', e, stackTrace);
+      return false;
+    }
+  }
+
   Future<bool> _syncSingleRecord(Map<String, dynamic> record) async {
     try {
+      final deviceId = await DeviceIdService().getDeviceId();
       final response = await _httpService.post(
-        url: ApiConstants.checkInUrl,
+        url: ApiConstants.checkIn,
         body: {
           'studentId': record['student_id'],
           'classId': record['class_id'],
           'timestamp': record['timestamp'],
           'rssi': record['rssi'],
           'distance': record['distance'],
+          'deviceId': deviceId,
           'offline_sync': true, // Flag to indicate this is a synced record
         },
       );

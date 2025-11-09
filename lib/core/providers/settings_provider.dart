@@ -6,6 +6,15 @@ class SettingsProvider extends ChangeNotifier {
   final SettingsService _service = SettingsService();
   AppSettings get settings => _service.getSettings();
 
+  SettingsProvider() {
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await _service.init();
+    notifyListeners();
+  }
+
   void toggleDarkMode(bool value) {
     _service.toggleDarkMode(value);
     notifyListeners();
@@ -33,6 +42,12 @@ class SettingsProvider extends ChangeNotifier {
 
   void toggleVibrationEnabled(bool value) {
     _service.toggleVibrationEnabled(value);
+    notifyListeners();
+  }
+
+  // Feature Flags
+  void toggleNewAttendancePipeline(bool value) {
+    _service.toggleNewAttendancePipeline(value);
     notifyListeners();
   }
 }

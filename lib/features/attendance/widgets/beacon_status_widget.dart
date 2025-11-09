@@ -6,7 +6,7 @@ import 'beacon_status/beacon_status_instructions.dart';
 
 /// Main BeaconStatusWidget - Refactored with modular architecture
 /// Orchestrates all status display modules
-/// 
+///
 /// Reduced from 594 lines to ~100 lines by delegating to specialized modules:
 /// - beacon_status_icon.dart: Status icon with 8+ states
 /// - beacon_status_main_card.dart: Main card orchestrator

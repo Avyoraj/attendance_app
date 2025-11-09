@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:logger/logger.dart';
 import '../constants/app_constants.dart';
 import 'http_service.dart';
 import 'beacon_service.dart';
+import 'connectivity_service.dart';
+import 'settings_service.dart';
+import 'logger_service.dart';
 
 /// Service for streaming RSSI data to backend for co-location analysis
 /// Captures RSSI every 5 seconds for 15 minutes after check-in
@@ -13,7 +15,7 @@ class RSSIStreamService {
   factory RSSIStreamService() => _instance;
   RSSIStreamService._internal();
 
-  final _logger = Logger();
+  final _logger = LoggerService();
   final _httpService = HttpService();
 
   Timer? _captureTimer;
@@ -32,6 +34,12 @@ class RSSIStreamService {
     required String classId,
     required DateTime sessionDate,
   }) {
+    // Feature flag: if pipeline disabled, skip streaming entirely
+    final settings = SettingsService().getSettings();
+    if (!settings.newAttendancePipelineEnabled) {
+      _logger.info('🛑 RSSI streaming skipped (feature flag disabled)');
+      return;
+    }
     // Stop any existing stream
     stopStreaming();
 
@@ -41,8 +49,9 @@ class RSSIStreamService {
     _rssiBuffer.clear();
     _isStreaming = true;
 
-    _logger.i('📡 Starting RSSI streaming for $studentId');
-    _logger.i('⏱️ Will stream for ${AppConstants.rssiStreamDuration.inMinutes} minutes');
+    _logger.info('📡 Starting RSSI streaming for $studentId');
+    _logger.info(
+        '⏱️ Will stream for ${AppConstants.rssiStreamDuration.inMinutes} minutes');
 
     // Start capture timer (every 5 seconds)
     _captureTimer = Timer.periodic(
@@ -80,48 +89,65 @@ class RSSIStreamService {
       };
 
       _rssiBuffer.add(reading);
-      _logger.d('📊 Captured RSSI: $rssi dBm ($distance m) - Buffer: ${_rssiBuffer.length}');
+      _logger.debug(
+          '📊 Captured RSSI: $rssi dBm ($distance m) - Buffer: ${_rssiBuffer.length}');
 
       // Auto-upload if buffer reaches max size
       if (_rssiBuffer.length >= AppConstants.rssiMaxBatchSize) {
         await _uploadBatch();
       }
     } catch (e) {
-      _logger.e('❌ Error capturing RSSI: $e');
+      _logger.error('❌ Error capturing RSSI: $e');
     }
   }
 
-  /// Upload buffered RSSI data to backend
+  /// Upload buffered RSSI data to backend with connectivity & retry awareness
   Future<void> _uploadBatch() async {
     if (_rssiBuffer.isEmpty) {
-      _logger.d('📤 No RSSI data to upload');
+      _logger.debug('📤 No RSSI data to upload');
       return;
     }
 
-    if (_activeStudentId == null || _activeClassId == null || _sessionDate == null) {
-      _logger.w('⚠️ Missing stream metadata, cannot upload');
+    if (_activeStudentId == null ||
+        _activeClassId == null ||
+        _sessionDate == null) {
+      _logger.warning('⚠️ Missing stream metadata, cannot upload');
       return;
+    }
+
+    // Check connectivity first
+    final connectivity = ConnectivityService();
+    if (!connectivity.isOnline) {
+      _logger.debug(
+          '📡 Offline - deferring RSSI upload (${_rssiBuffer.length} buffered)');
+      // Schedule a one-time retry when connectivity comes back
+      connectivity.onNextReconnect(() async {
+        _logger.info('🌐 Online again - retrying RSSI upload');
+        await _uploadBatch();
+      });
+      return; // keep buffer; will retry on reconnect
     }
 
     try {
-      _logger.i('📤 Uploading ${_rssiBuffer.length} RSSI readings...');
+      _logger.info('📤 Uploading ${_rssiBuffer.length} RSSI readings...');
 
       final response = await _httpService.streamRSSI(
         studentId: _activeStudentId!,
         classId: _activeClassId!,
         sessionDate: _sessionDate!,
-        rssiData: List.from(_rssiBuffer), // Copy to prevent modification during upload
+        rssiData: List.from(
+            _rssiBuffer), // Copy to prevent modification during upload
       );
 
       if (response['success'] == true) {
-        _logger.i('✅ Uploaded ${_rssiBuffer.length} readings successfully');
+        _logger.info('✅ Uploaded ${_rssiBuffer.length} readings successfully');
         _rssiBuffer.clear(); // Clear buffer after successful upload
       } else {
-        _logger.e('❌ Upload failed: ${response['error']}');
-        // Keep buffer for retry on next cycle
+        _logger.error('❌ Upload failed: ${response['error']}');
+        // Keep buffer for retry; add lightweight backoff marker
       }
     } catch (e) {
-      _logger.e('❌ Error uploading RSSI batch: $e');
+      _logger.error('❌ Error uploading RSSI batch: $e');
       // Keep buffer for retry
     }
   }
@@ -130,7 +156,7 @@ class RSSIStreamService {
   void stopStreaming({String reason = 'Manual stop'}) {
     if (!_isStreaming) return;
 
-    _logger.i('🛑 Stopping RSSI streaming: $reason');
+    _logger.info('🛑 Stopping RSSI streaming: $reason');
 
     // Cancel all timers
     _captureTimer?.cancel();
@@ -143,6 +169,7 @@ class RSSIStreamService {
 
     // Upload any remaining data
     if (_rssiBuffer.isNotEmpty) {
+      // Attempt one final upload (will defer if offline)
       _uploadBatch();
     }
 
@@ -158,7 +185,7 @@ class RSSIStreamService {
     // Get RSSI from BeaconService
     final beaconService = BeaconService();
     final rssi = beaconService.getCurrentRssi();
-    
+
     if (rssi != null) {
       // 🎯 CRITICAL FIX: Feed the RSSI back to keep beacon service buffer alive
       // During confirmation wait, beacon ranging is blocked, so buffer would expire
@@ -166,11 +193,11 @@ class RSSIStreamService {
       beaconService.feedRssiSample(rssi);
       return rssi;
     }
-    
-    // Fallback if no beacon detected - still feed it to maintain buffer
-    _logger.w('⚠️ No beacon RSSI available, using default');
+
+    // Fallback if no beacon detected — do NOT feed synthetic values back into BeaconService.
+    // We want the confirmation gate to fail when no real packets are seen.
+    _logger.warning('⚠️ No beacon RSSI available, using default for streaming only');
     const fallbackRssi = -70;
-    beaconService.feedRssiSample(fallbackRssi);
     return fallbackRssi;
   }
 
@@ -187,6 +214,14 @@ class RSSIStreamService {
 
   /// Check if currently streaming
   bool get isStreaming => _isStreaming;
+
+  /// Force a manual retry (e.g., triggered by connectivity restored event)
+  Future<void> retryPendingUpload() async {
+    if (_rssiBuffer.isEmpty) return;
+    _logger.debug(
+        '🔁 Manual retry requested for ${_rssiBuffer.length} RSSI readings');
+    await _uploadBatch();
+  }
 
   /// Get stream status info
   Map<String, dynamic>? getStreamInfo() {
@@ -206,5 +241,3 @@ class RSSIStreamService {
     stopStreaming(reason: 'Service disposed');
   }
 }
-
-

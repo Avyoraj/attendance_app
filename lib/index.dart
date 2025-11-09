@@ -17,7 +17,6 @@ export 'features/auth/services/auth_service.dart';
 export 'features/auth/screens/login_screen.dart';
 export 'features/auth/widgets/login_form.dart';
 
-export 'features/attendance/services/attendance_service.dart';
 export 'features/attendance/screens/home_screen.dart';
 export 'features/attendance/widgets/beacon_status_widget.dart';
 

@@ -6,8 +6,9 @@ import 'package:flutter/material.dart';
 class AppTheme {
   // Material 3 Color Tokens
   static const Color primarySeed = Color(0xFF6750A4); // Material 3 Purple
-  static const Color secondarySeed = Color(0xFF625B71); // Material 3 Purple Grey
-  
+  static const Color secondarySeed =
+      Color(0xFF625B71); // Material 3 Purple Grey
+
   static ThemeData get lightTheme {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: primarySeed,
@@ -17,10 +18,10 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      
+
       // Material 3 Typography Scale
       textTheme: _buildTextTheme(colorScheme),
-      
+
       // App Bar - Material 3 Style
       appBarTheme: AppBarTheme(
         backgroundColor: colorScheme.surface,
@@ -120,7 +121,8 @@ class AppTheme {
           borderRadius: BorderRadius.circular(4),
           borderSide: BorderSide(color: colorScheme.error, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
         hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
       ),
@@ -236,10 +238,10 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      
+
       // Material 3 Typography Scale
       textTheme: _buildTextTheme(colorScheme),
-      
+
       // App Bar - Material 3 Dark Style
       appBarTheme: AppBarTheme(
         backgroundColor: colorScheme.surface,
@@ -335,7 +337,8 @@ class AppTheme {
           borderRadius: BorderRadius.circular(4),
           borderSide: BorderSide(color: colorScheme.error, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
         hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
       ),

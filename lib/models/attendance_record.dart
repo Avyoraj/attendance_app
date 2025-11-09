@@ -20,10 +20,45 @@ class AttendanceRecord {
       id: json['id'] ?? '',
       studentId: json['studentId'] ?? '',
       classId: json['classId'] ?? '',
-      timestamp: DateTime.parse(json['timestamp'] ?? DateTime.now().toIso8601String()),
+      timestamp: _parseTimestamp(json['timestamp']),
       status: json['status'] ?? 'unknown',
       metadata: json['metadata'],
     );
+  }
+
+  factory AttendanceRecord.fromBackendJson(Map<String, dynamic> json) {
+    final checkInTime = json['checkInTime'] ?? json['timestamp'];
+    final metadata = <String, dynamic>{
+      'confirmedAt': json['confirmedAt'],
+      'cancelledAt': json['cancelledAt'],
+      'cancellationReason': json['cancellationReason'],
+      'rssi': json['rssi'],
+      'distance': json['distance'],
+      'beaconMajor': json['beaconMajor'],
+      'beaconMinor': json['beaconMinor'],
+      'remainingSeconds': json['remainingSeconds'],
+      'confirmationExpiresAt': json['confirmationExpiresAt'],
+      'cooldown': json['cooldown'],
+      'deviceId': json['deviceId'],
+      'sessionDate': json['sessionDate'],
+    }..removeWhere((key, value) => value == null);
+
+    return AttendanceRecord(
+      id: json['attendanceId'] ?? json['_id'] ?? json['id'] ?? '',
+      studentId: json['studentId'] ?? '',
+      classId: json['classId'] ?? '',
+      timestamp: _parseTimestamp(checkInTime),
+      status: json['status'] ?? 'unknown',
+      metadata: metadata.isEmpty ? null : metadata,
+    );
+  }
+
+  static DateTime _parseTimestamp(dynamic value) {
+    if (value is DateTime) return value;
+    if (value is String && value.isNotEmpty) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    return DateTime.now();
   }
 
   Map<String, dynamic> toJson() {

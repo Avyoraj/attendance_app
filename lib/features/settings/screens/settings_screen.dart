@@ -11,7 +11,6 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settingsProvider = Provider.of<SettingsProvider>(context);
-    final settings = settingsProvider.settings;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -28,6 +27,22 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
 
+          // Attendance (Feature Flags) Section
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _buildSectionHeader(
+                  context, 'Attendance (Beta)', colorScheme),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _buildAttendanceSettings(
+                  context, settingsProvider, colorScheme),
+            ),
+          ),
+
           // Appearance Section
           SliverToBoxAdapter(
             child: Padding(
@@ -38,7 +53,8 @@ class SettingsScreen extends StatelessWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildAppearanceSettings(context, settingsProvider, colorScheme),
+              child: _buildAppearanceSettings(
+                  context, settingsProvider, colorScheme),
             ),
           ),
 
@@ -54,7 +70,8 @@ class SettingsScreen extends StatelessWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildNotificationSettings(context, settingsProvider, colorScheme),
+              child: _buildNotificationSettings(
+                  context, settingsProvider, colorScheme),
             ),
           ),
 
@@ -80,7 +97,8 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildAutoAttendanceCard(BuildContext context, ColorScheme colorScheme) {
+  Widget _buildAutoAttendanceCard(
+      BuildContext context, ColorScheme colorScheme) {
     return Card(
       elevation: 1,
       child: Padding(
@@ -110,21 +128,23 @@ class SettingsScreen extends StatelessWidget {
                     children: [
                       Text(
                         'Auto-Attendance',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: colorScheme.onSurface,
-                        ),
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: colorScheme.onSurface,
+                                ),
                       ),
                       Text(
                         'Background tracking enabled',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                       ),
                     ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(16),
@@ -141,9 +161,9 @@ class SettingsScreen extends StatelessWidget {
                       Text(
                         'Active',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onPrimaryContainer,
-                          fontWeight: FontWeight.w500,
-                        ),
+                              color: colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.w500,
+                            ),
                       ),
                     ],
                   ),
@@ -154,9 +174,9 @@ class SettingsScreen extends StatelessWidget {
             Text(
               'Your attendance is automatically logged when you\'re near a classroom beacon. This feature runs continuously in the background.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                height: 1.4,
-              ),
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
             ),
           ],
         ),
@@ -164,20 +184,22 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionHeader(BuildContext context, String title, ColorScheme colorScheme) {
+  Widget _buildSectionHeader(
+      BuildContext context, String title, ColorScheme colorScheme) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         title,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          color: colorScheme.primary,
-          fontWeight: FontWeight.w500,
-        ),
+              color: colorScheme.primary,
+              fontWeight: FontWeight.w500,
+            ),
       ),
     );
   }
 
-  Widget _buildAppearanceSettings(BuildContext context, SettingsProvider settingsProvider, ColorScheme colorScheme) {
+  Widget _buildAppearanceSettings(BuildContext context,
+      SettingsProvider settingsProvider, ColorScheme colorScheme) {
     return Card(
       elevation: 1,
       child: Column(
@@ -206,7 +228,30 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildNotificationSettings(BuildContext context, SettingsProvider settingsProvider, ColorScheme colorScheme) {
+  Widget _buildAttendanceSettings(BuildContext context,
+      SettingsProvider settingsProvider, ColorScheme colorScheme) {
+    return Card(
+      elevation: 1,
+      child: Column(
+        children: [
+          _buildSwitchTile(
+            context: context,
+            title: 'New Attendance Pipeline (beta)',
+            subtitle:
+                'Two-stage provisional → confirm with reliability & correlation',
+            icon: Icons.science_outlined,
+            value: settingsProvider.settings.newAttendancePipelineEnabled,
+            onChanged: (value) =>
+                settingsProvider.toggleNewAttendancePipeline(value),
+            colorScheme: colorScheme,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationSettings(BuildContext context,
+      SettingsProvider settingsProvider, ColorScheme colorScheme) {
     return Card(
       elevation: 1,
       child: Column(
@@ -217,7 +262,8 @@ class SettingsScreen extends StatelessWidget {
             subtitle: 'Show attendance and alert notifications',
             icon: Icons.notifications_outlined,
             value: settingsProvider.settings.notificationEnabled,
-            onChanged: (value) => settingsProvider.toggleNotificationEnabled(value),
+            onChanged: (value) =>
+                settingsProvider.toggleNotificationEnabled(value),
             colorScheme: colorScheme,
           ),
           const Divider(height: 1),
@@ -237,7 +283,8 @@ class SettingsScreen extends StatelessWidget {
             subtitle: 'Vibrate for notifications',
             icon: Icons.vibration,
             value: settingsProvider.settings.vibrationEnabled,
-            onChanged: (value) => settingsProvider.toggleVibrationEnabled(value),
+            onChanged: (value) =>
+                settingsProvider.toggleVibrationEnabled(value),
             colorScheme: colorScheme,
           ),
         ],
@@ -328,14 +375,14 @@ class SettingsScreen extends StatelessWidget {
       title: Text(
         title,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          color: colorScheme.onSurface,
-        ),
+              color: colorScheme.onSurface,
+            ),
       ),
       subtitle: Text(
         subtitle,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: colorScheme.onSurfaceVariant,
-        ),
+              color: colorScheme.onSurfaceVariant,
+            ),
       ),
       trailing: Switch(
         value: value,
@@ -369,14 +416,14 @@ class SettingsScreen extends StatelessWidget {
       title: Text(
         title,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          color: colorScheme.onSurface,
-        ),
+              color: colorScheme.onSurface,
+            ),
       ),
       subtitle: Text(
         subtitle,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: colorScheme.onSurfaceVariant,
-        ),
+              color: colorScheme.onSurfaceVariant,
+            ),
       ),
       trailing: Icon(
         Icons.chevron_right,
@@ -386,4 +433,3 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 }
-

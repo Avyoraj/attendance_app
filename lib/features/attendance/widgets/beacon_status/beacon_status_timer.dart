@@ -34,7 +34,8 @@ class BeaconStatusTimer extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.timer_outlined, color: Colors.orange.shade700, size: 24),
+              Icon(Icons.timer_outlined,
+                  color: Colors.orange.shade700, size: 24),
               const SizedBox(width: 10),
               Text(
                 BeaconStatusHelpers.formatTime(remainingSeconds),
@@ -48,7 +49,7 @@ class BeaconStatusTimer extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          
+
           // Status message
           Text(
             'Confirming attendance...',
@@ -59,7 +60,7 @@ class BeaconStatusTimer extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          
+
           // Progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(4),

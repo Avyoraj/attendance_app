@@ -16,11 +16,11 @@ class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
   List<Widget> get _screens => [
-    HomeScreen(studentId: widget.studentId),
-    const HistoryScreen(),
-    const ProfileScreen(),
-    const SettingsScreen(),
-  ];
+        HomeScreen(studentId: widget.studentId),
+        const HistoryScreen(),
+        const ProfileScreen(),
+        const SettingsScreen(),
+      ];
 
   @override
   Widget build(BuildContext context) {

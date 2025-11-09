@@ -36,7 +36,7 @@ class _LoginFormState extends State<LoginForm> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -94,8 +94,8 @@ class _LoginFormState extends State<LoginForm> {
             Text(
               'Welcome to Attendance App',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: colorScheme.onSurface,
-              ),
+                    color: colorScheme.onSurface,
+                  ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -103,8 +103,8 @@ class _LoginFormState extends State<LoginForm> {
             Text(
               'Frictionless attendance tracking with beacon technology',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
+                    color: colorScheme.onSurfaceVariant,
+                  ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -133,8 +133,8 @@ class _LoginFormState extends State<LoginForm> {
                 Text(
                   'Student Login',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
+                        color: colorScheme.onSurface,
+                      ),
                 ),
               ],
             ),
@@ -234,8 +234,8 @@ class _LoginFormState extends State<LoginForm> {
               child: Text(
                 'Make sure you\'re connected to the school network',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+                      color: colorScheme.onSurfaceVariant,
+                    ),
               ),
             ),
           ],

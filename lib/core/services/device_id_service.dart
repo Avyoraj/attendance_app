@@ -2,6 +2,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+import 'package:attendance_app/core/utils/app_logger.dart';
 
 /// Service for managing unique device identification
 /// Uses HARDWARE-BASED device ID that survives app uninstall
@@ -32,18 +33,17 @@ class DeviceIdService {
         // ✅ ANDROID: Use Android ID (survives app uninstall)
         AndroidDeviceInfo androidInfo = await _deviceInfo.androidInfo;
         hardwareId = androidInfo.id; // This is Android ID
-        
-        print('📱 Android Device ID: ${hardwareId.substring(0, 8)}...');
-        print('✅ Hardware-based ID (survives uninstall)');
-        
+
+        AppLogger.debug(
+            '📱 Android Device ID: ${hardwareId.substring(0, 8)}...');
+        AppLogger.info('✅ Hardware-based ID (survives uninstall)');
       } else if (Platform.isIOS) {
         // ✅ iOS: Use identifierForVendor (survives app uninstall)
         IosDeviceInfo iosInfo = await _deviceInfo.iosInfo;
         hardwareId = iosInfo.identifierForVendor ?? 'unknown-ios';
-        
-        print('📱 iOS Device ID: ${hardwareId.substring(0, 8)}...');
-        print('✅ Hardware-based ID (survives uninstall)');
-        
+
+        AppLogger.debug('📱 iOS Device ID: ${hardwareId.substring(0, 8)}...');
+        AppLogger.info('✅ Hardware-based ID (survives uninstall)');
       } else {
         // Fallback for other platforms
         hardwareId = 'unknown-platform';
@@ -57,9 +57,8 @@ class DeviceIdService {
 
       _cachedDeviceId = hashedId;
       return hashedId;
-      
     } catch (e) {
-      print('❌ Error getting hardware device ID: $e');
+      AppLogger.error('❌ Error getting hardware device ID', error: e);
       // Fallback: Use a consistent but non-hardware ID
       _cachedDeviceId = 'error-device-id';
       return _cachedDeviceId!;
@@ -105,6 +104,6 @@ class DeviceIdService {
   void clearCache() {
     _cachedDeviceId = null;
     _cachedDeviceName = null;
-    print('🗑️ Device ID cache cleared');
+    AppLogger.debug('🗑️ Device ID cache cleared');
   }
 }

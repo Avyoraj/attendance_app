@@ -26,19 +26,20 @@ class AlertService {
   Future<void> initialize() async {
     _notifications = FlutterLocalNotificationsPlugin();
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const initSettings = InitializationSettings(android: androidSettings);
 
     await _notifications!.initialize(initSettings);
-    
+
     // Create alert channels
     await _createNotificationChannels();
-    
+
     _logger.info('Alert service initialized');
   }
 
   Future<void> _createNotificationChannels() async {
-    // Critical alerts channel (with sound and vibration) 
+    // Critical alerts channel (with sound and vibration)
     const criticalChannel = AndroidNotificationChannel(
       'critical_alerts',
       'Critical Alerts',
@@ -54,7 +55,7 @@ class AlertService {
       'attendance_success',
       'Attendance Success',
       description: 'Attendance logged notifications',
-      importance: Importance.max,  // MAX for highest visibility
+      importance: Importance.max, // MAX for highest visibility
       playSound: true,
       enableVibration: true,
       showBadge: true,
@@ -62,11 +63,13 @@ class AlertService {
     );
 
     await _notifications!
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(criticalChannel);
-    
+
     await _notifications!
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(attendanceChannel);
   }
 
@@ -87,7 +90,8 @@ class AlertService {
   Future<void> showBluetoothDisabledAlert() async {
     // Check cooldown
     if (_lastBluetoothAlert != null) {
-      final timeSinceLastAlert = DateTime.now().difference(_lastBluetoothAlert!);
+      final timeSinceLastAlert =
+          DateTime.now().difference(_lastBluetoothAlert!);
       if (timeSinceLastAlert < _alertCooldown) {
         _logger.debug('Bluetooth alert on cooldown');
         return;
@@ -142,55 +146,57 @@ class AlertService {
   /// Show attendance recorded notification
   Future<void> showAttendanceRecordedNotification(String classId) async {
     _logger.info('📢 Attempting to show attendance notification for $classId');
-    
+
     // Check if notifications are initialized
     if (_notifications == null) {
       _logger.error('❌ Notifications not initialized! Initializing now...');
       await initialize();
     }
-    
+
     // Use dedicated attendance channel with MAX importance
     await _showAttendanceNotification(classId);
-    
+
     _logger.info('📢 Attendance notification sent for $classId');
   }
-  
+
   /// Show attendance notification with dedicated channel
   Future<void> _showAttendanceNotification(String classId) async {
     _logger.debug('Showing attendance notification for $classId');
-    
+
     // Check notification permission
-    final hasPermission = await PermissionService().isNotificationPermissionGranted();
+    final hasPermission =
+        await PermissionService().isNotificationPermissionGranted();
     if (!hasPermission) {
       _logger.warning('❌ Cannot show notification - permission not granted');
       return;
     }
-    
+
     _logger.debug('✓ Notification permission granted');
 
     final androidDetails = AndroidNotificationDetails(
-      'attendance_success',  // Dedicated attendance channel
+      'attendance_success', // Dedicated attendance channel
       'Attendance Success',
       channelDescription: 'Attendance logged notifications',
-      importance: Importance.max,  // MAX importance
-      priority: Priority.max,  // MAX priority
+      importance: Importance.max, // MAX importance
+      priority: Priority.max, // MAX priority
       playSound: true,
       enableVibration: true,
       visibility: NotificationVisibility.public,
       showWhen: true,
       enableLights: true,
-      ledColor: const Color(0xFF00FF00),  // Green LED
+      ledColor: const Color(0xFF00FF00), // Green LED
       ledOnMs: 1000,
       ledOffMs: 500,
-      category: AndroidNotificationCategory.message,  // Changed to MESSAGE for better visibility
-      ticker: 'Attendance Recorded for $classId',  // Shows in status bar
+      category: AndroidNotificationCategory
+          .message, // Changed to MESSAGE for better visibility
+      ticker: 'Attendance Recorded for $classId', // Shows in status bar
     );
 
     final details = NotificationDetails(android: androidDetails);
 
     try {
       await _notifications?.show(
-        200,  // Fixed ID for attendance
+        200, // Fixed ID for attendance
         '✅ Attendance Recorded',
         'Your attendance for $classId has been logged successfully.',
         details,
@@ -247,14 +253,15 @@ class AlertService {
     bool ongoing = false,
   }) async {
     _logger.debug('Showing notification: id=$id, title=$title');
-    
+
     // Check notification permission before showing notification
-    final hasPermission = await PermissionService().isNotificationPermissionGranted();
+    final hasPermission =
+        await PermissionService().isNotificationPermissionGranted();
     if (!hasPermission) {
       _logger.warning('❌ Cannot show notification - permission not granted');
       return;
     }
-    
+
     _logger.debug('✓ Notification permission granted');
 
     final androidDetails = AndroidNotificationDetails(
@@ -267,7 +274,7 @@ class AlertService {
       enableVibration: priority == Priority.high,
       ongoing: ongoing,
       autoCancel: !ongoing,
-      visibility: NotificationVisibility.public,  // Show on lock screen
+      visibility: NotificationVisibility.public, // Show on lock screen
       showWhen: true,
       category: AndroidNotificationCategory.status,
     );

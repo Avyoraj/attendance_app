@@ -1,6 +1,9 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
 import 'package:logger/logger.dart';
+
+import '../constants/api_constants.dart';
 
 class HttpService {
   static final HttpService _instance = HttpService._internal();
@@ -8,14 +11,8 @@ class HttpService {
   HttpService._internal();
 
   final _logger = Logger();
-
-  // API Base URL - Production Vercel Deployment
-  static const String _baseUrl = 'https://attendance-backend-omega.vercel.app/api';
-  
-  // Alternative URLs (comment/uncomment as needed):
-  // For Local Testing: 'http://192.168.1.121:3000/api'
-  // For Android Emulator: 'http://10.0.2.2:3000/api'
-  // For iOS Simulator: 'http://localhost:3000/api'
+  // Network timeout to prevent hanging requests (e.g., cold starts)
+  static const Duration _requestTimeout = Duration(seconds: 8);
 
   final Map<String, String> _defaultHeaders = {
     'Content-Type': 'application/json',
@@ -27,12 +24,18 @@ class HttpService {
     Map<String, String>? headers,
   }) async {
     final mergedHeaders = {..._defaultHeaders, ...?headers};
-    
-    return await http.post(
-      Uri.parse(url),
-      headers: mergedHeaders,
-      body: jsonEncode(body),
-    );
+    try {
+      return await http
+          .post(
+            Uri.parse(url),
+            headers: mergedHeaders,
+            body: jsonEncode(body),
+          )
+          .timeout(_requestTimeout);
+    } on TimeoutException catch (e) {
+      _logger.w('HTTP POST timeout for $url: $e');
+      rethrow;
+    }
   }
 
   Future<http.Response> get({
@@ -40,11 +43,17 @@ class HttpService {
     Map<String, String>? headers,
   }) async {
     final mergedHeaders = {..._defaultHeaders, ...?headers};
-    
-    return await http.get(
-      Uri.parse(url),
-      headers: mergedHeaders,
-    );
+    try {
+      return await http
+          .get(
+            Uri.parse(url),
+            headers: mergedHeaders,
+          )
+          .timeout(_requestTimeout);
+    } on TimeoutException catch (e) {
+      _logger.w('HTTP GET timeout for $url: $e');
+      rethrow;
+    }
   }
 
   /// NEW: Check-in with device ID and RSSI
@@ -55,8 +64,10 @@ class HttpService {
     required int rssi,
   }) async {
     try {
+      _logger.d(
+          'HTTP POST ➜ ${ApiConstants.checkIn} {studentId: $studentId, classId: $classId, rssi: $rssi, deviceId: …}');
       final response = await post(
-        url: '$_baseUrl/check-in',
+        url: ApiConstants.checkIn,
         body: {
           'studentId': studentId,
           'classId': classId,
@@ -72,7 +83,9 @@ class HttpService {
         return {
           'success': true,
           'data': data,
-          'attendanceId': data['attendance']?['id'] ?? data['attendance']?['_id'] ?? 'unknown',
+          'attendanceId': data['attendance']?['id'] ??
+              data['attendance']?['_id'] ??
+              'unknown',
           'status': data['attendance']?['status'] ?? 'provisional',
         };
       } else if (response.statusCode == 403) {
@@ -82,7 +95,8 @@ class HttpService {
         return {
           'success': false,
           'error': 'DEVICE_MISMATCH',
-          'message': error['message'] ?? 'This account is linked to another device',
+          'message':
+              error['message'] ?? 'This account is linked to another device',
         };
       } else {
         final error = jsonDecode(response.body);
@@ -103,16 +117,23 @@ class HttpService {
   }
 
   /// NEW: Confirm attendance (two-step)
+  /// Now includes deviceId and optional attendanceId for stricter backend checks
   Future<Map<String, dynamic>> confirmAttendance({
     required String studentId,
     required String classId,
+    required String deviceId,
+    String? attendanceId,
   }) async {
     try {
+      _logger.d(
+          'HTTP POST ➜ ${ApiConstants.confirmAttendance} {studentId: $studentId, classId: $classId, deviceId: …, attendanceId: ${attendanceId != null ? attendanceId.substring(0, 6) + '…' : 'none'}}');
       final response = await post(
-        url: '$_baseUrl/attendance/confirm',  // FIXED: Remove duplicate /api/
+        url: ApiConstants.confirmAttendance,
         body: {
           'studentId': studentId,
           'classId': classId,
+          'deviceId': deviceId,
+          if (attendanceId != null) 'attendanceId': attendanceId,
         },
       );
 
@@ -142,13 +163,15 @@ class HttpService {
   Future<Map<String, dynamic>> cancelProvisionalAttendance({
     required String studentId,
     required String classId,
+    String? deviceId,
   }) async {
     try {
       final response = await post(
-        url: '$_baseUrl/attendance/cancel-provisional',
+        url: ApiConstants.cancelProvisional,
         body: {
           'studentId': studentId,
           'classId': classId,
+          if (deviceId != null) 'deviceId': deviceId,
         },
       );
 
@@ -183,7 +206,7 @@ class HttpService {
   }) async {
     try {
       final response = await post(
-        url: '$_baseUrl/check-in/stream',
+        url: ApiConstants.rssiStream,
         body: {
           'studentId': studentId,
           'classId': classId,
@@ -220,7 +243,7 @@ class HttpService {
   }) async {
     try {
       final response = await get(
-        url: '$_baseUrl/attendance/today/$studentId',
+        url: ApiConstants.todayAttendance(studentId),
       );
 
       _logger.i('Get today attendance response: ${response.statusCode}');
@@ -254,9 +277,10 @@ class HttpService {
   }
 
   // Static method for background service (legacy)
-  static Future<http.Response> submitAttendance(String studentId, String classId) async {
+  static Future<http.Response> submitAttendance(
+      String studentId, String classId) async {
     const String apiUrl = 'https://your-backend-url.vercel.app/api/attendance';
-    
+
     return await http.post(
       Uri.parse(apiUrl),
       headers: {'Content-Type': 'application/json'},

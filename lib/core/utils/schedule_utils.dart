@@ -17,15 +17,17 @@ class ScheduleUtils {
   static bool isDuringBreak(DateTime time) {
     final hour = time.hour;
     final minute = time.minute;
-    
+
     // After 1:30 PM and before 2:00 PM
-    if (hour == AppConstants.breakStartHour && minute >= AppConstants.breakStartMinute) {
+    if (hour == AppConstants.breakStartHour &&
+        minute >= AppConstants.breakStartMinute) {
       return true;
     }
-    if (hour == AppConstants.breakEndHour && minute < AppConstants.breakEndMinute) {
+    if (hour == AppConstants.breakEndHour &&
+        minute < AppConstants.breakEndMinute) {
       return true;
     }
-    
+
     return false;
   }
 
@@ -33,15 +35,17 @@ class ScheduleUtils {
   static bool isDuringCollegeHours(DateTime time) {
     final hour = time.hour;
     final minute = time.minute;
-    
+
     // Before college starts
     if (hour < AppConstants.collegeStartHour) return false;
-    if (hour == AppConstants.collegeStartHour && minute < AppConstants.collegeStartMinute) return false;
-    
+    if (hour == AppConstants.collegeStartHour &&
+        minute < AppConstants.collegeStartMinute) return false;
+
     // After college ends
     if (hour > AppConstants.collegeEndHour) return false;
-    if (hour == AppConstants.collegeEndHour && minute >= AppConstants.collegeEndMinute) return false;
-    
+    if (hour == AppConstants.collegeEndHour &&
+        minute >= AppConstants.collegeEndMinute) return false;
+
     return true;
   }
 
@@ -58,11 +62,11 @@ class ScheduleUtils {
         AppConstants.breakEndMinute,
       );
     }
-    
+
     // Otherwise, next class is 1 hour after current time
     // (Assuming each class is 1 hour)
     final nextClassTime = currentTime.add(AppConstants.classDuration);
-    
+
     // If next class would be during break, skip to 2:00 PM
     if (isDuringBreak(nextClassTime)) {
       return DateTime(
@@ -73,7 +77,7 @@ class ScheduleUtils {
         AppConstants.breakEndMinute,
       );
     }
-    
+
     // If next class would be after college hours, return tomorrow's first class
     if (!isDuringCollegeHours(nextClassTime)) {
       final tomorrow = currentTime.add(const Duration(days: 1));
@@ -85,7 +89,7 @@ class ScheduleUtils {
         AppConstants.collegeStartMinute,
       );
     }
-    
+
     return nextClassTime;
   }
 
@@ -103,10 +107,10 @@ class ScheduleUtils {
   /// Examples: "in 45 minutes", "in 1 hour 15 minutes"
   static String formatTimeRemaining(Duration duration) {
     if (duration.isNegative) return "now";
-    
+
     final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
-    
+
     if (hours > 0) {
       if (minutes > 0) {
         return "in $hours hour${hours > 1 ? 's' : ''} $minutes minute${minutes > 1 ? 's' : ''}";
@@ -125,17 +129,17 @@ class ScheduleUtils {
     final classEndTime = getClassEndTime(classStartTime);
     final cooldownEndTime = getCooldownEndTime(classStartTime);
     final remainingTime = cooldownEndTime.difference(now);
-    
+
     if (remainingTime.isNegative) {
       return "Cooldown expired. You can check in now.";
     }
-    
+
     // If class hasn't ended yet, show class end time
     if (now.isBefore(classEndTime)) {
       final classTimeLeft = classEndTime.difference(now);
       return "Class ends at ${formatTime(classEndTime)} (${formatTimeRemaining(classTimeLeft)}).\nNext check-in available after cooldown.";
     }
-    
+
     // If class ended but still in cooldown
     return "Next check-in available ${formatTimeRemaining(remainingTime)}.";
   }
@@ -146,13 +150,13 @@ class ScheduleUtils {
   static String getCancelledMessage(DateTime cancelledTime, DateTime now) {
     final classEndTime = getClassEndTime(cancelledTime);
     final nextClassTime = getNextClassStartTime(classEndTime);
-    
+
     // If current class hasn't ended yet
     if (now.isBefore(classEndTime)) {
       final timeLeft = classEndTime.difference(now);
       return "Attendance cancelled.\nCurrent class ends at ${formatTime(classEndTime)} (${formatTimeRemaining(timeLeft)}).\nTry again in next class at ${formatTime(nextClassTime)}.";
     }
-    
+
     // If current class ended, show next class time
     final timeUntilNext = nextClassTime.difference(now);
     return "Attendance cancelled.\nNext class starts at ${formatTime(nextClassTime)} (${formatTimeRemaining(timeUntilNext)}).";
@@ -168,7 +172,7 @@ class ScheduleUtils {
     final cooldownEndTime = getCooldownEndTime(classStartTime);
     final remainingTime = cooldownEndTime.difference(now);
     final classTimeLeft = classEndTime.difference(now);
-    
+
     return {
       'inCooldown': remainingTime.inSeconds > 0,
       'classEndTime': classEndTime,
@@ -180,7 +184,9 @@ class ScheduleUtils {
       'remainingTimeFormatted': formatTimeRemaining(remainingTime),
       'classEnded': now.isAfter(classEndTime),
       'classTimeLeftMinutes': classTimeLeft.inMinutes.clamp(0, 60),
-      'classTimeLeftFormatted': classTimeLeft.isNegative ? "ended" : formatTimeRemaining(classTimeLeft),
+      'classTimeLeftFormatted': classTimeLeft.isNegative
+          ? "ended"
+          : formatTimeRemaining(classTimeLeft),
       'message': getCooldownMessage(classStartTime, now),
     };
   }
@@ -194,7 +200,7 @@ class ScheduleUtils {
     final nextClassTime = getNextClassStartTime(classEndTime);
     final classTimeLeft = classEndTime.difference(now);
     final timeUntilNext = nextClassTime.difference(now);
-    
+
     return {
       'cancelled': true,
       'classEndTime': classEndTime,
@@ -203,7 +209,9 @@ class ScheduleUtils {
       'nextClassTimeFormatted': formatTime(nextClassTime),
       'classEnded': now.isAfter(classEndTime),
       'classTimeLeftMinutes': classTimeLeft.inMinutes.clamp(0, 60),
-      'classTimeLeftFormatted': classTimeLeft.isNegative ? "ended" : formatTimeRemaining(classTimeLeft),
+      'classTimeLeftFormatted': classTimeLeft.isNegative
+          ? "ended"
+          : formatTimeRemaining(classTimeLeft),
       'timeUntilNextMinutes': timeUntilNext.inMinutes,
       'timeUntilNextFormatted': formatTimeRemaining(timeUntilNext),
       'message': getCancelledMessage(cancelledTime, now),

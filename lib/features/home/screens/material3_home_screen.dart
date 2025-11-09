@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../attendance/screens/home_screen.dart';
 
 /// Material 3 Home Screen - Wrapper for existing HomeScreen
-/// 
+///
 /// This simply wraps the existing HomeScreen which already has:
 /// - Full beacon functionality
 /// - Material 3 design

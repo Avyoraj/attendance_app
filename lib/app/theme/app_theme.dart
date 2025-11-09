@@ -9,14 +9,12 @@ class AppTheme {
         brightness: Brightness.light,
       ),
       visualDensity: VisualDensity.adaptivePlatformDensity,
-
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.indigo,
         elevation: 0,
         centerTitle: true,
       ),
-
       filledButtonTheme: FilledButtonThemeData(
         style: ButtonStyle(
           backgroundColor: const WidgetStatePropertyAll(Colors.indigo),
@@ -31,7 +29,6 @@ class AppTheme {
           ),
         ),
       ),
-
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -40,9 +37,9 @@ class AppTheme {
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: Colors.indigo, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
-
       cardTheme: CardTheme(
         elevation: 1,
         shape: RoundedRectangleBorder(

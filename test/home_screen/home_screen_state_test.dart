@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:attendance_app/features/attendance/screens/home_screen/home_screen_state.dart';
 
 /// Test suite for HomeScreenState module
-/// 
+///
 /// Validates:
 /// - State initialization
 /// - State updates
@@ -23,8 +23,9 @@ void main() {
 
     test('State initializes with correct default values', () {
       expect(state.beaconStatus, 'Initializing...');
+      expect(state.beaconStatusType, BeaconStatusType.info);
       expect(state.isCheckingIn, false);
-      expect(state.showBatteryCard, true);
+      expect(state.showBatteryCard, false);
       expect(state.isAwaitingConfirmation, false);
       expect(state.remainingSeconds, 0);
       expect(state.currentClassId, null);
@@ -42,6 +43,7 @@ void main() {
     test('resetToScanning() resets state correctly', () {
       // Setup state with values
       state.beaconStatus = 'Some status';
+      state.beaconStatusType = BeaconStatusType.info;
       state.isCheckingIn = true;
       state.isAwaitingConfirmation = true;
       state.remainingSeconds = 100;
@@ -51,45 +53,48 @@ void main() {
 
       // Verify reset
       expect(state.beaconStatus, '📡 Scanning for classroom beacon...');
+      expect(state.beaconStatusType, BeaconStatusType.scanning);
       expect(state.isCheckingIn, false);
       expect(state.isAwaitingConfirmation, false);
       expect(state.remainingSeconds, 0);
     });
 
     test('updateBeaconStatus() updates status', () {
-      state.updateBeaconStatus('Test status');
+      state.updateBeaconStatus('Test status',
+          type: BeaconStatusType.confirming);
       expect(state.beaconStatus, 'Test status');
+      expect(state.beaconStatusType, BeaconStatusType.confirming);
     });
 
     test('isStatusLocked() returns true for locked states', () {
-      final lockedStatuses = [
-        'Check-in recorded for Class A',
-        'Attendance CONFIRMED!',
-        'Attendance Recorded for Class B',
-        'Already Checked In for Class C',
-        'Attendance Cancelled!',
-        'Processing your request',
-        'Recording your attendance',
-      ];
+      final lockedTypes = <BeaconStatusType>{
+        BeaconStatusType.provisional,
+        BeaconStatusType.confirming,
+        BeaconStatusType.confirmed,
+        BeaconStatusType.success,
+        BeaconStatusType.cancelled,
+        BeaconStatusType.cooldown,
+      };
 
-      for (var status in lockedStatuses) {
-        state.beaconStatus = status;
-        expect(state.isStatusLocked(), true, 
-          reason: 'Status "$status" should be locked');
+      for (var type in lockedTypes) {
+        state.beaconStatusType = type;
+        expect(state.isStatusLocked(), true,
+            reason: 'Status "$type" should be locked');
       }
     });
 
     test('isStatusLocked() returns false for unlocked states', () {
-      final unlockedStatuses = [
-        'Scanning for beacons',
-        'Move closer to beacon',
-        'Classroom detected',
-      ];
+      final unlockedTypes = <BeaconStatusType>{
+        BeaconStatusType.scanning,
+        BeaconStatusType.failed,
+        BeaconStatusType.deviceLocked,
+        BeaconStatusType.info,
+      };
 
-      for (var status in unlockedStatuses) {
-        state.beaconStatus = status;
+      for (var type in unlockedTypes) {
+        state.beaconStatusType = type;
         expect(state.isStatusLocked(), false,
-          reason: 'Status "$status" should not be locked');
+            reason: 'Status "$type" should not be locked');
       }
     });
 
@@ -142,8 +147,9 @@ void main() {
     });
 
     test('dispose() cleans up resources', () {
-      // This should not throw
-      expect(() => state.dispose(), returnsNormally);
+      // Use a fresh instance so tearDown can still dispose the shared state
+      final tempState = HomeScreenState();
+      expect(() => tempState.dispose(), returnsNormally);
     });
   });
 }

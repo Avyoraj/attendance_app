@@ -34,7 +34,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Replace with actual studentId from auth context if available
       const studentId = '123456';
       final profile = await ProfileService().getUserProfile(studentId);
-      
+
       setState(() {
         _profile = profile;
         _isLoading = false;
@@ -50,7 +50,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
@@ -94,8 +94,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Text(
             'Loading profile...',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
+                  color: colorScheme.onSurfaceVariant,
+                ),
           ),
         ],
       ),
@@ -126,16 +126,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               'Unable to load profile',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: colorScheme.onSurface,
-              ),
+                    color: colorScheme.onSurface,
+                  ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               _error ?? 'An error occurred while loading your profile',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
+                    color: colorScheme.onSurfaceVariant,
+                  ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -174,16 +174,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               'No profile found',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: colorScheme.onSurface,
-              ),
+                    color: colorScheme.onSurface,
+                  ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               'Unable to load your profile information.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
+                    color: colorScheme.onSurfaceVariant,
+                  ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -204,7 +204,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _buildProfileHeader(colorScheme),
             ),
           ),
-          
+
           // Stats Card
           const SliverToBoxAdapter(
             child: Padding(
@@ -217,7 +217,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ),
-          
+
           // Action Buttons
           SliverToBoxAdapter(
             child: Padding(
@@ -225,7 +225,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _buildActionButtons(colorScheme),
             ),
           ),
-          
+
           // Additional Info
           SliverToBoxAdapter(
             child: Padding(
@@ -284,8 +284,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               _profile!.name,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: colorScheme.onSurface,
-              ),
+                    color: colorScheme.onSurface,
+                  ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -300,8 +300,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Text(
                 'Student ID: ${_profile!.studentId}',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+                      color: colorScheme.onSurfaceVariant,
+                    ),
               ),
             ),
           ],
@@ -320,7 +320,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onPressed: () {
               // TODO: Navigate to edit profile screen
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Edit profile feature coming soon!')),
+                const SnackBar(
+                    content: Text('Edit profile feature coming soon!')),
               );
             },
             icon: const Icon(Icons.edit),
@@ -370,18 +371,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Text(
                   'Profile Information',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
+                        color: colorScheme.onSurface,
+                      ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            
+
             // Additional profile fields
-            _buildInfoRow('Email', _profile!.email ?? 'Not provided', Icons.email),
-            _buildInfoRow('Phone', _profile!.phone ?? 'Not provided', Icons.phone),
-            _buildInfoRow('Department', _profile!.department ?? 'Not provided', Icons.business),
-            _buildInfoRow('Year', _profile!.year ?? 'Not provided', Icons.calendar_today),
+            _buildInfoRow(
+                'Email', _profile!.email ?? 'Not provided', Icons.email),
+            _buildInfoRow(
+                'Phone', _profile!.phone ?? 'Not provided', Icons.phone),
+            _buildInfoRow('Department', _profile!.department ?? 'Not provided',
+                Icons.business),
+            _buildInfoRow(
+                'Year', _profile!.year ?? 'Not provided', Icons.calendar_today),
           ],
         ),
       ),
@@ -390,7 +395,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildInfoRow(String label, String value, IconData icon) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -408,14 +413,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Text(
                   label,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                 ),
                 Text(
                   value,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
+                        color: colorScheme.onSurface,
+                      ),
                 ),
               ],
             ),

@@ -37,22 +37,23 @@ class BeaconStatusMainCard extends StatelessWidget {
             Text(
               'Attendance Status',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
             ),
             const SizedBox(height: 16),
 
             // Divider
-            Divider(color: Theme.of(context).colorScheme.outline.withOpacity(0.2)),
+            Divider(
+                color: Theme.of(context).colorScheme.outline.withOpacity(0.2)),
             const SizedBox(height: 16),
 
             // Status Message
             Text(
               status,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                height: 1.5,
-              ),
+                    height: 1.5,
+                  ),
               textAlign: TextAlign.center,
             ),
 

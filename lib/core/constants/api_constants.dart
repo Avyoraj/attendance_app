@@ -1,7 +1,24 @@
+import 'package:attendance_app/core/config/environment.dart';
+
 class ApiConstants {
-  static const String baseUrl = 'https://attendance-backend-omega.vercel.app';
-  static const String checkInEndpoint = '/api/check-in';
-  
-  // Complete URLs
-  static const String checkInUrl = '$baseUrl$checkInEndpoint';
+  // Base URL now provided via --dart-define=API_URL, see Environment.apiUrl.
+  // Examples:
+  //  - flutter run --dart-define=API_URL=http://10.0.2.2:3000/api
+  //  - flutter build apk --dart-define=API_URL=https://prod.example.com/api
+  static const String apiBase = Environment.apiUrl;
+
+  // Core attendance endpoints
+  // NOTE: server.js registers direct routes (/api/check-in) to match mobile client expectations.
+  // Avoid '/api/attendance/check-in' unless backend routing changes.
+  static const String checkIn = '$apiBase/check-in';
+  static const String confirmAttendance = '$apiBase/attendance/confirm';
+  static const String cancelProvisional =
+      '$apiBase/attendance/cancel-provisional';
+  static String todayAttendance(String studentId) =>
+      '$apiBase/attendance/today/$studentId';
+
+  // Device + RSSI endpoints
+  static const String validateDevice = '$apiBase/validate-device';
+  static const String rssiStream = '$apiBase/check-in/stream';
+  static const String analyzeCorrelations = '$apiBase/rssi/analyze';
 }

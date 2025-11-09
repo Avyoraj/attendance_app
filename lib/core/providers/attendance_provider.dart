@@ -117,19 +117,21 @@ class AttendanceState extends ChangeNotifier {
 
   // Utility methods
   bool get isStatusLocked {
-    return ['cooldown', 'device_locked', 'cancelled'].contains(_beaconStatus.toLowerCase());
+    return ['cooldown', 'device_locked', 'cancelled']
+        .contains(_beaconStatus.toLowerCase());
   }
 
   bool get isInProvisionalState {
-    return ['provisional_check_in', 'confirming'].contains(_beaconStatus.toLowerCase());
+    return ['provisional_check_in', 'confirming']
+        .contains(_beaconStatus.toLowerCase());
   }
 
   String getFormattedRemainingTime() {
     if (_remainingSeconds == null) return '';
-    
+
     final minutes = _remainingSeconds! ~/ 60;
     final seconds = _remainingSeconds! % 60;
-    
+
     if (minutes > 0) {
       return '${minutes}m ${seconds}s';
     } else {
@@ -141,7 +143,6 @@ class AttendanceState extends ChangeNotifier {
   bool get isValidState {
     return _studentId != null && _studentId!.isNotEmpty;
   }
-
 }
 
 /// Provider wrapper for easy access
@@ -166,6 +167,8 @@ class AttendanceProvider extends StatelessWidget {
 
 /// Extension for easy access to AttendanceState
 extension AttendanceStateExtension on BuildContext {
-  AttendanceState get attendanceState => Provider.of<AttendanceState>(this, listen: false);
-  AttendanceState get attendanceStateWatch => Provider.of<AttendanceState>(this);
+  AttendanceState get attendanceState =>
+      Provider.of<AttendanceState>(this, listen: false);
+  AttendanceState get attendanceStateWatch =>
+      Provider.of<AttendanceState>(this);
 }

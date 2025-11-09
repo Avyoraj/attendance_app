@@ -4,10 +4,10 @@ import '../../../../core/services/continuous_beacon_service.dart';
 import './home_screen_state.dart';
 
 /// 🔋 HomeScreen Battery Module
-/// 
+///
 /// Handles battery optimization checks and screen-off scanning setup.
 /// Ensures the app can scan for beacons even when screen is off.
-/// 
+///
 /// Features:
 /// - One-time battery optimization check per session
 /// - Cached state to avoid repeated checks
@@ -15,136 +15,139 @@ import './home_screen_state.dart';
 /// - User-dismissible battery card
 class HomeScreenBattery {
   final HomeScreenState state;
-  final Function(VoidCallback) setStateCallback;
   final Function showSnackBar;
-  
+
   HomeScreenBattery({
     required this.state,
-    required this.setStateCallback,
     required this.showSnackBar,
   });
-  
+
   /// Check battery optimization status once per app session
-  /// 
+  ///
   /// Uses cached state to avoid repeated checks. If the card was
   /// dismissed or battery optimization is already disabled, won't show again.
   Future<void> checkBatteryOptimizationOnce() async {
     // If we've already checked once this app session, use cached state
-    if (HomeScreenState.hasCheckedBatteryOnce && 
+    if (HomeScreenState.hasCheckedBatteryOnce &&
         HomeScreenState.cachedBatteryCardState != null) {
       // Use cached state without triggering setState to prevent glitching
       if (state.showBatteryCard != HomeScreenState.cachedBatteryCardState!) {
-        setStateCallback(() {
+        state.update((state) {
           state.showBatteryCard = HomeScreenState.cachedBatteryCardState!;
         });
       }
       return;
     }
-    
+
     // Prevent multiple simultaneous checks
     if (state.isCheckingBatteryOptimization) return;
-    state.isCheckingBatteryOptimization = true;
-    
+    state.update((state) {
+      state.isCheckingBatteryOptimization = true;
+    });
+
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Check if user has dismissed the card permanently
-      final hasCardBeenDismissed = prefs.getBool('battery_card_dismissed') ?? false;
+      final hasCardBeenDismissed =
+          prefs.getBool('battery_card_dismissed') ?? false;
       if (hasCardBeenDismissed) {
         HomeScreenState.cachedBatteryCardState = false;
         HomeScreenState.hasCheckedBatteryOnce = true;
-        setStateCallback(() {
+        state.update((state) {
           state.showBatteryCard = false;
         });
         return;
       }
-      
+
       // Check actual battery optimization status
       final continuousService = ContinuousBeaconService();
       final isIgnoring = await continuousService.checkBatteryOptimization();
-      
+
       // If battery optimization is already disabled, don't show the card at all
       if (isIgnoring) {
         HomeScreenState.cachedBatteryCardState = false;
         HomeScreenState.hasCheckedBatteryOnce = true;
         await prefs.setBool('battery_card_dismissed', true);
-        
-        setStateCallback(() {
+
+        state.update((state) {
           state.isBatteryOptimizationDisabled = true;
           state.showBatteryCard = false;
         });
         return;
       }
-      
+
       // Battery optimization is NOT disabled, so show the card
       // It will stay shown until user takes action (enable or dismiss)
       HomeScreenState.cachedBatteryCardState = true;
       HomeScreenState.hasCheckedBatteryOnce = true;
-      
+
       // Small delay to prevent any visual glitching
       await Future.delayed(const Duration(milliseconds: 100));
-      
-      setStateCallback(() {
+
+      state.update((state) {
         state.isBatteryOptimizationDisabled = false;
         state.showBatteryCard = true; // Show card and keep it shown
       });
     } finally {
-      state.isCheckingBatteryOptimization = false;
+      state.update((state) {
+        state.isCheckingBatteryOptimization = false;
+      });
     }
   }
-  
+
   /// Request to disable battery optimization for screen-off scanning
-  /// 
+  ///
   /// Opens system settings and polls for up to 10 seconds to check if enabled.
   Future<void> enableScreenOffScanning() async {
     final continuousService = ContinuousBeaconService();
     await continuousService.requestDisableBatteryOptimization();
-    
+
     // Keep checking every 500ms for up to 10 seconds until enabled
     for (int i = 0; i < 20; i++) {
       await Future.delayed(const Duration(milliseconds: 500));
       final isIgnoring = await continuousService.checkBatteryOptimization();
-      
+
       if (isIgnoring) {
         // Successfully enabled!
         // Save to preferences so card doesn't show again
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('battery_card_dismissed', true);
         HomeScreenState.cachedBatteryCardState = false;
-        
-        setStateCallback(() {
+
+        state.update((state) {
           state.isBatteryOptimizationDisabled = true;
           state.showBatteryCard = false;
         });
-        
+
         showSnackBar('✅ Screen-off scanning enabled!');
         return;
       }
     }
-    
+
     // If we reach here, user may have denied or dismissed the dialog
     // Just leave the card visible so they can try again later
   }
-  
+
   /// Dismiss the battery optimization card permanently
   Future<void> dismissBatteryCard() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('battery_card_dismissed', true);
     HomeScreenState.cachedBatteryCardState = false;
-    
-    setStateCallback(() {
+
+    state.update((state) {
       state.showBatteryCard = false;
     });
-    
+
     state.logger.info('🔋 Battery card dismissed by user');
   }
-  
+
   /// Check if battery optimization is currently disabled
   Future<bool> isBatteryOptimizationDisabled() async {
     final continuousService = ContinuousBeaconService();
     return await continuousService.checkBatteryOptimization();
   }
-  
+
   /// Build the battery optimization card widget
   Widget buildBatteryCard(BuildContext context) {
     return Card(

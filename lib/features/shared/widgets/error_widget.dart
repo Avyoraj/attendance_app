@@ -29,8 +29,8 @@ class CustomErrorWidget extends StatelessWidget {
             Text(
               message,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Colors.red.shade700,
-              ),
+                    color: Colors.red.shade700,
+                  ),
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[

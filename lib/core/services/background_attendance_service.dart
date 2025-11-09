@@ -11,6 +11,7 @@ import 'sync_service.dart';
 import 'alert_service.dart';
 import 'http_service.dart';
 import '../constants/api_constants.dart';
+import 'device_id_service.dart';
 
 /// Background attendance service
 /// Runs even when app is closed or phone is locked
@@ -143,6 +144,8 @@ Future<void> _recordBackgroundAttendance(
 ) async {
   final logger = LoggerService();
   final prefs = await SharedPreferences.getInstance();
+  final deviceIdService = DeviceIdService();
+  final deviceId = await deviceIdService.getDeviceId();
 
   // Check if attendance already recorded for this class today
   final lastRecordKey = 'last_attendance_$classId';
@@ -168,13 +171,14 @@ Future<void> _recordBackgroundAttendance(
       // Try to send directly to server
       final httpService = HttpService();
       final response = await httpService.post(
-        url: ApiConstants.checkInUrl,
+        url: ApiConstants.checkIn,
         body: {
           'studentId': studentId,
           'classId': classId,
           'timestamp': now.toIso8601String(),
           'rssi': rssi,
           'distance': distance,
+          'deviceId': deviceId,
           'background': true,
         },
       );
@@ -182,7 +186,7 @@ Future<void> _recordBackgroundAttendance(
       if (response.statusCode == 201 || response.statusCode == 200) {
         logger.attendanceRecorded(studentId, classId, true);
         await prefs.setString(lastRecordKey, now.toIso8601String());
-        
+
         // Show notification
         final alertService = AlertService();
         await alertService.initialize();
@@ -208,7 +212,6 @@ Future<void> _recordBackgroundAttendance(
     final alertService = AlertService();
     await alertService.initialize();
     await alertService.showInternetUnavailableAlert();
-    
   } catch (e, stackTrace) {
     logger.error('Failed to record background attendance', e, stackTrace);
   }
@@ -216,19 +219,22 @@ Future<void> _recordBackgroundAttendance(
 
 double _calculateDistance(int rssi, int txPower) {
   if (rssi == 0) return -1.0;
-  
+
   final ratio = rssi * 1.0 / txPower;
   if (ratio < 1.0) {
     return (ratio * 10);
   } else {
-    final accuracy = (0.89976) * (ratio * ratio * ratio * ratio * ratio * ratio * ratio) + 0.111;
+    final accuracy =
+        (0.89976) * (ratio * ratio * ratio * ratio * ratio * ratio * ratio) +
+            0.111;
     return accuracy;
   }
 }
 
 /// Foreground background service manager
 class BackgroundAttendanceService {
-  static final BackgroundAttendanceService _instance = BackgroundAttendanceService._internal();
+  static final BackgroundAttendanceService _instance =
+      BackgroundAttendanceService._internal();
   factory BackgroundAttendanceService() => _instance;
   BackgroundAttendanceService._internal();
 
@@ -297,7 +303,6 @@ class BackgroundAttendanceService {
       // Show notification
       final alertService = AlertService();
       await alertService.showBackgroundServiceNotification();
-      
     } catch (e, stackTrace) {
       _logger.error('Failed to start background service', e, stackTrace);
       rethrow;

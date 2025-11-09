@@ -25,16 +25,21 @@ class ProfileStatsCard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _buildStat(context, 'Total', totalDays, Icons.calendar_today),
-            _buildStat(context, 'Present', presentDays, Icons.check_circle, color: Colors.green),
-            _buildStat(context, 'Absent', absentDays, Icons.cancel, color: Colors.red),
-            _buildStat(context, 'Streak', streak, Icons.local_fire_department, color: Colors.orange),
+            _buildStat(context, 'Present', presentDays, Icons.check_circle,
+                color: Colors.green),
+            _buildStat(context, 'Absent', absentDays, Icons.cancel,
+                color: Colors.red),
+            _buildStat(context, 'Streak', streak, Icons.local_fire_department,
+                color: Colors.orange),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStat(BuildContext context, String label, int value, IconData icon, {Color? color}) {
+  Widget _buildStat(
+      BuildContext context, String label, int value, IconData icon,
+      {Color? color}) {
     return Column(
       children: [
         Icon(icon, color: color ?? Theme.of(context).colorScheme.primary),

@@ -188,6 +188,50 @@ Modules can be reused elsewhere:
 ## 📦 Module Dependencies
 
 ```
+---
+
+## 🔐 Post-Phase Enhancement: Confirmation-Time Beacon Visibility Gate
+
+To address late false confirmations when the beacon was turned off near the end of the waiting window, a strict
+"recent real packet" visibility rule was added to the confirmation pipeline (outside the UI refactor, but part of overall reliability hardening):
+
+### What Changed
+- Added `confirmationBeaconVisibilityMaxAge` (default: 2s) in `AppConstants`.
+- Exposed `lastBeaconEventTime` and `wasBeaconSeenRecently()` in `BeaconService`.
+- Confirmation service now:
+  1. Performs a hard pre-check: if no real beacon packet in the last 2s, immediately cancels provisional.
+  2. During the 2s sampling window, each tick requires beacon visibility + fresh raw RSSI.
+- RSSI streaming no longer feeds fallback (-70) values into the analyzer when no beacon is present (prevents synthetic freshness).
+
+### Why This Matters
+Previously, fallback samples could keep RSSI buffers "fresh" even after the beacon was powered off, letting the
+final proximity gate pass. Now, only actual ranging callbacks (real packets) count toward confirmation.
+
+### Tuning Guidance
+| Parameter | Purpose | Default | Raise If | Lower If |
+|-----------|---------|---------|----------|----------|
+| `confirmationBeaconVisibilityMaxAge` | Max age of last real packet at confirmation moment | 2s | You see legitimate cancellations on devices with slower scan intervals | You want stricter rejection of borderline cases |
+| `confirmationRssiThreshold` | Minimum RSSI to treat as “still in room” at confirmation | -82 dBm | False cancels in far corners | Too many edge confirmations |
+
+Raise visibility window to 3–4s only if certain devices regularly scan slower (e.g., aggressive OEM throttling). Keep it low (≤2s) for maximum integrity.
+
+### Failure Log Examples
+```
+⚠️ Beacon not recently visible (>2s) — cancelling provisional
+🛂 Gate miss 3/7 (reason=RSSI stale (age 4s > 3s), age=4)
+```
+
+### Quick Verification Scenario
+1. Check in normally → provisional starts.
+2. Turn beacon off ~2–10s before the timer ends.
+3. Observe immediate cancellation with above log line and state transition to `cancelled`.
+
+### Adjacent Improvements (Future)
+- Persist last beacon visibility reason in local DB for audit.
+- Surface a UI hint (“Beacon inactive – confirmation cancelled”).
+- Adaptive visibility max age per device model (metrics bucketed).
+
+---
 beacon_status_helpers.dart (independent)
   ↓
 beacon_status_icon.dart

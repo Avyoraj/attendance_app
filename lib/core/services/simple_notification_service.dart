@@ -10,7 +10,7 @@ import 'http_service.dart';
 class SimpleNotificationService {
   static const String _channelId = 'beacon_tracking_channel';
   static const String _channelName = 'Beacon Distance Tracking';
-  
+
   static FlutterLocalNotificationsPlugin? _notifications;
   static StreamSubscription<RangingResult>? _streamRanging;
   static double? _lastDistance;
@@ -25,15 +25,15 @@ class SimpleNotificationService {
 
   static Future<void> _initializeNotifications() async {
     _notifications = FlutterLocalNotificationsPlugin();
-    
+
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    
+
     const InitializationSettings initializationSettings =
         InitializationSettings(android: initializationSettingsAndroid);
-    
+
     await _notifications!.initialize(initializationSettings);
-    
+
     // Create notification channel
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
       _channelId,
@@ -43,18 +43,29 @@ class SimpleNotificationService {
       playSound: false,
       enableVibration: false,
     );
-    
+
     await _notifications!
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
   }
 
   static Future<void> startBackgroundTracking() async {
     if (_isServiceRunning) return;
-    
+
     _isServiceRunning = true;
     await _startBeaconScanning();
-    await _showNotification('🔍 Background Tracking Started', 'Scanning for classroom beacons...');
+    await _showNotification(
+        '🔍 Background Tracking Started', 'Scanning for classroom beacons...');
+  }
+
+  // NEW: Start foreground notification without internal ranging (external control mode)
+  static Future<void> startForegroundNotification() async {
+    if (_isServiceRunning) return;
+    _isServiceRunning = true;
+    await initializeService();
+    await _showNotification(
+        '🔍 Background Tracking Started', 'Scanning for classroom beacons...');
   }
 
   static Future<void> stopBackgroundTracking() async {
@@ -66,15 +77,29 @@ class SimpleNotificationService {
     _notificationTimer = null;
   }
 
+  // NEW: Stop foreground notification started in external control mode
+  static Future<void> stopForegroundNotification() async {
+    _isServiceRunning = false;
+    _notificationTimer?.cancel();
+    await _notifications?.cancelAll();
+    _notificationTimer = null;
+  }
+
+  // NEW: Update notification text directly (external control mode)
+  static Future<void> updateStatusText(String title, String content) async {
+    await _showNotification(title, content);
+  }
+
   static Future<void> _startBeaconScanning() async {
     try {
       await flutterBeacon.initializeScanning;
-      
+
       final prefs = await SharedPreferences.getInstance();
       final studentId = prefs.getString('student_id');
-      
+
       if (studentId == null) {
-        await _showNotification('Please login first', 'Open app to authenticate');
+        await _showNotification(
+            'Please login first', 'Open app to authenticate');
         return;
       }
 
@@ -85,12 +110,12 @@ class SimpleNotificationService {
         ),
       ];
 
-      _streamRanging = flutterBeacon.ranging(regions).listen((RangingResult result) {
+      _streamRanging =
+          flutterBeacon.ranging(regions).listen((RangingResult result) {
         if (_isServiceRunning) {
           _handleBeaconRanging(result, studentId);
         }
       });
-      
     } catch (e) {
       debugPrint('Error starting beacon scanning: $e');
     }
@@ -104,16 +129,17 @@ class SimpleNotificationService {
 
     final beacon = result.beacons.first;
     final distance = _calculateDistance(beacon.rssi, beacon.txPower ?? -59);
-    
+
     // Only update if distance changed significantly (reduce battery usage)
     if (_lastDistance == null || (distance - _lastDistance!).abs() > 2.0) {
       _lastDistance = distance;
       _currentClassId = 'CS${beacon.major}'; // Extract class from major
-      
+
       _updateDistanceNotification(distance, _currentClassId!);
-      
+
       // Auto attendance if in range and not already recorded
-      if (distance <= AppConstants.rssiDistanceThreshold && !_attendanceRecorded) {
+      if (distance <= AppConstants.rssiDistanceThreshold &&
+          !_attendanceRecorded) {
         _recordAttendance(studentId, _currentClassId!);
       } else if (distance > AppConstants.rssiDistanceThreshold) {
         _attendanceRecorded = false; // Reset when moving away
@@ -124,7 +150,7 @@ class SimpleNotificationService {
   // Calculate approximate distance from RSSI
   static double _calculateDistance(int rssi, int txPower) {
     if (rssi == 0) return -1.0;
-    
+
     double ratio = rssi * 1.0 / txPower;
     if (ratio < 1.0) {
       return math.pow(ratio, 10).toDouble();
@@ -134,9 +160,10 @@ class SimpleNotificationService {
     }
   }
 
-  static Future<void> _updateDistanceNotification(double distance, String classId) async {
+  static Future<void> _updateDistanceNotification(
+      double distance, String classId) async {
     String title, content;
-    
+
     if (distance <= AppConstants.rssiDistanceThreshold) {
       title = '✅ In Range - $classId';
       content = 'Ready for attendance • ${distance.toStringAsFixed(1)}m away';
@@ -147,7 +174,7 @@ class SimpleNotificationService {
       title = '🔍 $classId Detected';
       content = '${distance.toStringAsFixed(1)}m away • Keep moving closer';
     }
-    
+
     await _showNotification(title, content);
   }
 
@@ -159,23 +186,27 @@ class SimpleNotificationService {
     });
   }
 
-  static Future<void> _recordAttendance(String studentId, String classId) async {
+  static Future<void> _recordAttendance(
+      String studentId, String classId) async {
     if (_attendanceRecorded) return;
-    
+
     _attendanceRecorded = true;
-    await _showNotification('⏳ Recording...', 'Submitting attendance for $classId');
-    
+    await _showNotification(
+        '⏳ Recording...', 'Submitting attendance for $classId');
+
     try {
       final response = await HttpService.submitAttendance(studentId, classId);
-      
+
       if (response.statusCode == 200) {
-        await _showNotification('✅ Success!', 'Attendance recorded for $classId');
+        await _showNotification(
+            '✅ Success!', 'Attendance recorded for $classId');
         // Auto-dismiss notification after 5 seconds
         Timer(const Duration(seconds: 5), () {
           _notifications?.cancel(1);
         });
       } else {
-        await _showNotification('❌ Failed', 'Could not record attendance. Try again.');
+        await _showNotification(
+            '❌ Failed', 'Could not record attendance. Try again.');
         _attendanceRecorded = false;
       }
     } catch (e) {

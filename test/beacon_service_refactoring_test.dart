@@ -18,17 +18,16 @@ void main() {
       beaconService.feedRssiSample(-55);
       beaconService.feedRssiSample(-57);
       beaconService.feedRssiSample(-53);
-      
+
       // Should not throw
       expect(true, true);
     });
 
     test('Can get RSSI data', () {
       beaconService.feedRssiSample(-55);
-      
-      final rssi = beaconService.getCurrentRssi();
+
       final rawData = beaconService.getRawRssiData();
-      
+
       expect(rawData, isA<Map<String, dynamic>>());
       expect(rawData.containsKey('rssi'), true);
       expect(rawData.containsKey('isInGracePeriod'), true);
@@ -50,7 +49,7 @@ void main() {
       beaconService.setOnAttendanceStateChanged((state, studentId, classId) {
         callbackCalled = true;
       });
-      
+
       // Callback should be set
       expect(callbackCalled, false); // Not called yet
     });

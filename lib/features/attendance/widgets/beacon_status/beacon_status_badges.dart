@@ -18,7 +18,8 @@ class BeaconStatusBadges extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Show confirmed badge
-    if (BeaconStatusHelpers.isConfirmedStatus(status) && !isAwaitingConfirmation) {
+    if (BeaconStatusHelpers.isConfirmedStatus(status) &&
+        !isAwaitingConfirmation) {
       return _buildConfirmedBadge();
     }
 
@@ -156,7 +157,8 @@ class BeaconStatusBadges extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.class_, color: Colors.red.shade800, size: 18),
+                        Icon(Icons.class_,
+                            color: Colors.red.shade800, size: 18),
                         const SizedBox(width: 6),
                         Text(
                           cooldownInfo!['nextClassTimeFormatted'],
@@ -168,7 +170,8 @@ class BeaconStatusBadges extends StatelessWidget {
                         ),
                       ],
                     ),
-                    if (cooldownInfo!.containsKey('timeUntilNextFormatted')) ...[
+                    if (cooldownInfo!
+                        .containsKey('timeUntilNextFormatted')) ...[
                       const SizedBox(height: 4),
                       Text(
                         '(${cooldownInfo!['timeUntilNextFormatted']})',

@@ -4,10 +4,10 @@ import 'package:attendance_app/features/attendance/screens/home_screen/home_scre
 import 'package:attendance_app/features/attendance/screens/home_screen/home_screen_sync.dart';
 
 /// Integration test for HomeScreen modules
-/// 
+///
 /// Tests that all modules work together correctly:
 /// - State module
-/// - Timers module  
+/// - Timers module
 /// - Sync module
 /// - Module dependencies
 void main() {
@@ -43,9 +43,11 @@ void main() {
       // Test state operations
       state.updateBeaconStatus('Test status');
       expect(state.beaconStatus, 'Test status');
+      expect(state.beaconStatusType, BeaconStatusType.info);
 
       state.resetToScanning();
       expect(state.beaconStatus, '📡 Scanning for classroom beacon...');
+      expect(state.beaconStatusType, BeaconStatusType.scanning);
       expect(state.isCheckingIn, false);
     });
 
@@ -71,7 +73,7 @@ void main() {
 
     test('Status locking works across modules', () {
       // Set a locked status
-      state.beaconStatus = 'Check-in recorded for Class A';
+      state.beaconStatusType = BeaconStatusType.provisional;
       expect(state.isStatusLocked(), true);
 
       // Verify state reflects this
@@ -90,17 +92,17 @@ void main() {
     test('Timer state management', () {
       // Cancel all timers (should not throw)
       expect(() => timers.cancelAllTimers(), returnsNormally);
-      
+
       expect(timers.isConfirmationTimerActive(), false);
       expect(timers.isCooldownRefreshTimerActive(), false);
     });
 
     test('Multiple state updates work correctly', () {
       // Simulate a check-in flow
-      state.beaconStatus = 'Scanning for beacons';
+      state.beaconStatusType = BeaconStatusType.scanning;
       expect(state.isStatusLocked(), false);
 
-      state.beaconStatus = 'Check-in recorded for Class A';
+      state.beaconStatusType = BeaconStatusType.provisional;
       expect(state.isStatusLocked(), true);
 
       state.isAwaitingConfirmation = true;
@@ -142,10 +144,10 @@ void main() {
   group('HomeScreen Module Isolation Tests', () {
     test('State module can be used independently', () {
       final state = HomeScreenState();
-      
+
       state.updateBeaconStatus('Independent test');
       expect(state.beaconStatus, 'Independent test');
-      
+
       state.dispose();
     });
 
@@ -158,7 +160,7 @@ void main() {
 
       expect(sync.state, state);
       expect(sync.studentId, 'STUDENT456');
-      
+
       state.dispose();
     });
 
@@ -175,7 +177,7 @@ void main() {
 
       expect(timers.state, state);
       expect(timers.sync, sync);
-      
+
       state.dispose();
     });
   });

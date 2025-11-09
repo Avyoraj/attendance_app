@@ -19,9 +19,12 @@ class BeaconStatusHelpers {
 
     if (status.contains('CONFIRMED')) {
       return Icons.check_circle;
-    } else if (status.contains('Check-in recorded') || status.contains('recorded')) {
+    } else if (status.contains('Check-in recorded') ||
+        status.contains('recorded')) {
       return Icons.pending;
-    } else if (status.contains('failed') || status.contains('Error') || status.contains('Device Locked')) {
+    } else if (status.contains('failed') ||
+        status.contains('Error') ||
+        status.contains('Device Locked')) {
       return Icons.error;
     } else if (status.contains('Scanning')) {
       return Icons.bluetooth_searching;
@@ -40,9 +43,12 @@ class BeaconStatusHelpers {
 
     if (status.contains('CONFIRMED')) {
       return Colors.green;
-    } else if (status.contains('Check-in recorded') || status.contains('recorded')) {
+    } else if (status.contains('Check-in recorded') ||
+        status.contains('recorded')) {
       return Colors.orange;
-    } else if (status.contains('failed') || status.contains('Error') || status.contains('Device Locked')) {
+    } else if (status.contains('failed') ||
+        status.contains('Error') ||
+        status.contains('Device Locked')) {
       return Colors.red;
     } else if (status.contains('Scanning')) {
       return Colors.blue;
@@ -55,7 +61,8 @@ class BeaconStatusHelpers {
 
   /// Checks if status indicates a confirmed state
   static bool isConfirmedStatus(String status) {
-    return status.contains('CONFIRMED') || status.contains('Already Checked In');
+    return status.contains('CONFIRMED') ||
+        status.contains('Already Checked In');
   }
 
   /// Checks if status indicates a cancelled state
@@ -64,7 +71,8 @@ class BeaconStatusHelpers {
   }
 
   /// Checks if cooldown card should be shown
-  static bool shouldShowCooldown(Map<String, dynamic>? cooldownInfo, String status) {
+  static bool shouldShowCooldown(
+      Map<String, dynamic>? cooldownInfo, String status) {
     return cooldownInfo != null &&
         cooldownInfo['inCooldown'] == true &&
         !isCancelledStatus(status);

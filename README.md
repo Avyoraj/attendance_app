@@ -124,6 +124,11 @@ Update in `lib/core/constants/api_constants.dart`:
 static const String baseUrl = 'https://your-backend.vercel.app';
 ```
 
+Tips:
+- Android emulator: use `http://10.0.2.2:3000` to reach your host machine.
+- Physical device on same Wi‑Fi: use your computer's LAN IP, e.g. `http://192.168.1.50:3000`.
+- Keep the protocol (http/https) and avoid trailing slashes.
+
 ### Beacon Settings
 Update in `lib/core/constants/app_constants.dart`:
 ```dart
