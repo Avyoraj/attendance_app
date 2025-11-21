@@ -324,9 +324,13 @@ class HomeScreenSync {
       );
 
       try {
+        // Include deviceId for backend enforcement
+        final deviceId = await DeviceIdService().getDeviceId();
+
         final result = await state.httpService.cancelProvisionalAttendance(
           studentId: studentId,
           classId: state.currentClassId!,
+          deviceId: deviceId,
         );
         if (result['success'] != true) {
           await LocalDatabaseService().savePendingAction(

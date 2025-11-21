@@ -64,8 +64,6 @@ class HttpService {
     required int rssi,
   }) async {
     try {
-      _logger.d(
-          'HTTP POST ➜ ${ApiConstants.checkIn} {studentId: $studentId, classId: $classId, rssi: $rssi, deviceId: …}');
       final response = await post(
         url: ApiConstants.checkIn,
         body: {
@@ -83,9 +81,7 @@ class HttpService {
         return {
           'success': true,
           'data': data,
-          'attendanceId': data['attendance']?['id'] ??
-              data['attendance']?['_id'] ??
-              'unknown',
+          'attendanceId': data['attendance']?['id'] ?? data['attendance']?['_id'] ?? 'unknown',
           'status': data['attendance']?['status'] ?? 'provisional',
         };
       } else if (response.statusCode == 403) {
@@ -95,8 +91,7 @@ class HttpService {
         return {
           'success': false,
           'error': 'DEVICE_MISMATCH',
-          'message':
-              error['message'] ?? 'This account is linked to another device',
+          'message': error['message'] ?? 'This account is linked to another device',
         };
       } else {
         final error = jsonDecode(response.body);
@@ -117,7 +112,7 @@ class HttpService {
   }
 
   /// NEW: Confirm attendance (two-step)
-  /// Now includes deviceId and optional attendanceId for stricter backend checks
+  /// Includes deviceId and optional attendanceId for backend integrity checks
   Future<Map<String, dynamic>> confirmAttendance({
     required String studentId,
     required String classId,
@@ -125,16 +120,18 @@ class HttpService {
     String? attendanceId,
   }) async {
     try {
-      _logger.d(
-          'HTTP POST ➜ ${ApiConstants.confirmAttendance} {studentId: $studentId, classId: $classId, deviceId: …, attendanceId: ${attendanceId != null ? attendanceId.substring(0, 6) + '…' : 'none'}}');
+      final body = <String, dynamic>{
+        'studentId': studentId,
+        'classId': classId,
+        'deviceId': deviceId,
+      };
+      if (attendanceId != null) {
+        body['attendanceId'] = attendanceId;
+      }
+
       final response = await post(
         url: ApiConstants.confirmAttendance,
-        body: {
-          'studentId': studentId,
-          'classId': classId,
-          'deviceId': deviceId,
-          if (attendanceId != null) 'attendanceId': attendanceId,
-        },
+        body: body,
       );
 
       if (response.statusCode == 200) {
@@ -160,10 +157,11 @@ class HttpService {
   }
 
   /// NEW: Cancel provisional attendance (student left before confirmation)
+  /// Includes deviceId for backend device-binding enforcement
   Future<Map<String, dynamic>> cancelProvisionalAttendance({
     required String studentId,
     required String classId,
-    String? deviceId,
+    required String deviceId,
   }) async {
     try {
       final response = await post(
@@ -171,7 +169,7 @@ class HttpService {
         body: {
           'studentId': studentId,
           'classId': classId,
-          if (deviceId != null) 'deviceId': deviceId,
+          'deviceId': deviceId,
         },
       );
 
@@ -277,10 +275,9 @@ class HttpService {
   }
 
   // Static method for background service (legacy)
-  static Future<http.Response> submitAttendance(
-      String studentId, String classId) async {
+  static Future<http.Response> submitAttendance(String studentId, String classId) async {
     const String apiUrl = 'https://your-backend-url.vercel.app/api/attendance';
-
+    
     return await http.post(
       Uri.parse(apiUrl),
       headers: {'Content-Type': 'application/json'},

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:attendance_app/core/utils/app_logger.dart';
+import 'package:attendance_app/core/services/device_id_service.dart';
 // Removed HeroStatusCard in favor of a calmer, single status banner.
 // import '../widgets/hero_status_card.dart';
 import '../widgets/calm_status_banner.dart';
@@ -124,9 +125,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _cancelProvisionalAttendance() async {
     if (_state.currentClassId != null) {
       try {
+        // Include deviceId for backend device-binding enforcement
+        final deviceId = await DeviceIdService().getDeviceId();
+
         await _state.httpService.cancelProvisionalAttendance(
           studentId: widget.studentId,
           classId: _state.currentClassId!,
+          deviceId: deviceId,
         );
         AppLogger.info('✅ Backend cancelled provisional attendance');
       } catch (e) {
