@@ -21,4 +21,10 @@ class ApiConstants {
   static const String validateDevice = '$apiBase/validate-device';
   static const String rssiStream = '$apiBase/check-in/stream';
   static const String analyzeCorrelations = '$apiBase/rssi/analyze';
+
+  // Admin endpoints (Teacher/Admin dashboard only)
+  // These require Bearer token authentication
+  static const String adminDeviceBindings = '$apiBase/students/admin/device-bindings';
+  static String adminResetDevice(String studentId) =>
+      '$apiBase/students/admin/reset-device/$studentId';
 }

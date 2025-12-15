@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:logger/logger.dart';
+import '../../models/attendance_state.dart';
 
 /// 🎯 State Manager Module
 /// 
@@ -10,11 +11,25 @@ import 'package:logger/logger.dart';
 /// - cancelled: Attendance cancelled (left early)
 /// - failed: Check-in failed
 /// 
-/// Also manages state callbacks to notify UI of state changes.
+/// Now uses Streams for reactive UI updates (prevents callback glitches).
+/// Also maintains legacy callback support for backward compatibility.
 class BeaconStateManager {
   final _logger = Logger();
   
-  // Current attendance state
+  // Stream controller for reactive state updates
+  final _stateController = StreamController<AttendanceState>.broadcast();
+  
+  /// Stream of attendance state changes
+  /// Use StreamBuilder in UI for automatic lifecycle management
+  Stream<AttendanceState> get stateStream => _stateController.stream;
+  
+  // Current state (cached for synchronous access)
+  AttendanceState _currentState = AttendanceState.scanning();
+  
+  /// Get current state synchronously
+  AttendanceState get currentStateSnapshot => _currentState;
+  
+  // Current attendance state (legacy string format)
   String _currentAttendanceState = 'scanning';
   
   // Current student/class being tracked
@@ -25,7 +40,7 @@ class BeaconStateManager {
   DateTime? _lockUntil;
   DateTime? _lastConfirmedAt;
   
-  // State change callback
+  // Legacy state change callback (maintained for backward compatibility)
   Function(String state, String studentId, String classId)? _onAttendanceStateChanged;
   
   // Timers for state management
@@ -33,7 +48,7 @@ class BeaconStateManager {
   Timer? _confirmationTimer;
   Timer? _movementDetectionTimer;
   
-  /// Get current state
+  /// Get current state (legacy string)
   String get currentState => _currentAttendanceState;
   
   /// Get current student ID
@@ -57,10 +72,70 @@ class BeaconStateManager {
     }
   }
   
-  /// Notify UI of state change
+  /// Notify UI of state change (both Stream and legacy callback)
   void notifyStateChange(String state, String studentId, String classId) {
+    // Emit to Stream (new reactive approach)
+    _emitState(state, studentId, classId);
+    
+    // Also call legacy callback if registered
     _onAttendanceStateChanged?.call(state, studentId, classId);
     _logger.i('📢 State notification sent: $state');
+  }
+  
+  /// Emit state to stream
+  void _emitState(String state, String studentId, String classId) {
+    final status = AttendanceState.statusFromString(state);
+    
+    switch (status) {
+      case AttendanceStatus.scanning:
+        _currentState = AttendanceState.scanning();
+        break;
+      case AttendanceStatus.provisional:
+        _currentState = AttendanceState.provisional(
+          studentId: studentId,
+          classId: classId,
+        );
+        break;
+      case AttendanceStatus.confirmed:
+        _currentState = AttendanceState.confirmed(
+          studentId: studentId,
+          classId: classId,
+        );
+        break;
+      case AttendanceStatus.success:
+        _currentState = AttendanceState.success(
+          studentId: studentId,
+          classId: classId,
+        );
+        break;
+      case AttendanceStatus.cancelled:
+        _currentState = AttendanceState.cancelled(
+          studentId: studentId,
+          classId: classId,
+        );
+        break;
+      case AttendanceStatus.cooldown:
+        _currentState = AttendanceState.cooldown(
+          studentId: studentId,
+          classId: classId,
+        );
+        break;
+      case AttendanceStatus.failed:
+        _currentState = AttendanceState.failed(
+          studentId: studentId,
+          classId: classId,
+        );
+        break;
+      case AttendanceStatus.deviceLocked:
+        _currentState = AttendanceState.deviceLocked(
+          studentId: studentId,
+        );
+        break;
+    }
+    
+    if (!_stateController.isClosed) {
+      _stateController.add(_currentState);
+    }
   }
   
   /// Set state and notify UI
@@ -77,6 +152,12 @@ class BeaconStateManager {
     _currentStudentId = null;
     _currentClassId = null;
     
+    // Emit scanning state
+    _currentState = AttendanceState.scanning();
+    if (!_stateController.isClosed) {
+      _stateController.add(_currentState);
+    }
+    
     // Cancel all timers
     _provisionalTimer?.cancel();
     _confirmationTimer?.cancel();
@@ -87,7 +168,7 @@ class BeaconStateManager {
     _movementDetectionTimer = null;
   }
   
-  /// Set callback for state changes
+  /// Set callback for state changes (legacy - use stateStream instead)
   void setOnStateChanged(Function(String state, String studentId, String classId) callback) {
     _onAttendanceStateChanged = callback;
     _logger.d('✅ State change callback registered');
@@ -165,6 +246,9 @@ class BeaconStateManager {
     _currentStudentId = null;
     _currentClassId = null;
     _onAttendanceStateChanged = null;
+    
+    // Close the stream controller
+    _stateController.close();
     
     _logger.d('🧹 State manager disposed');
   }

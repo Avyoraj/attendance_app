@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:attendance_app/features/attendance/screens/home_screen/home_screen_state.dart';
+import 'package:attendance_app/core/constants/app_constants.dart';
+import 'circular_confirmation_timer.dart';
 
 /// A minimal, calm status banner with no animations.
 /// Focuses on a single line status and an optional timer pill.
@@ -55,33 +57,11 @@ class CalmStatusBanner extends StatelessWidget {
             ),
           ),
           if (state.isAwaitingConfirmation && state.remainingSeconds > 0)
-            _timerPill(context, colors, state.getFormattedRemainingTime()),
-        ],
-      ),
-    );
-  }
-
-  Widget _timerPill(
-      BuildContext context, ColorScheme colors, String formatted) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: colors.secondaryContainer,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: colors.outlineVariant),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.timer_outlined,
-              size: 16, color: colors.onSecondaryContainer),
-          const SizedBox(width: 6),
-          Text(
-            formatted,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: colors.onSecondaryContainer,
-                ),
-          ),
+            CompactConfirmationTimer(
+              totalSeconds: AppConstants.secondCheckDelay.inSeconds,
+              remainingSeconds: state.remainingSeconds,
+              isActive: state.isAwaitingConfirmation,
+            ),
         ],
       ),
     );

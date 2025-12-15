@@ -157,25 +157,77 @@ class _HomeScreenState extends State<HomeScreen> {
               title: Text('Welcome, ${widget.studentId}'),
               actions: [
                 IconButton(
+                  icon: const Icon(Icons.sync),
+                  onPressed: state.isSyncing ? null : _handleManualRefresh,
+                  tooltip: 'Sync with server',
+                ),
+                IconButton(
                   icon: const Icon(Icons.logout),
                   onPressed: () => _helpers.handleLogout(),
                   tooltip: 'Logout',
                 ),
               ],
             ),
-            body: Padding(
-              padding: const EdgeInsets.all(AppConstants.defaultPadding),
-              child: Column(
-                children: [
-                  if (state.showBatteryCard) _battery.buildBatteryCard(context),
-                  // Single calm banner (no animations) to reduce cognitive load.
-                  CalmStatusBanner(state: state, studentId: widget.studentId),
-                ],
+            body: RefreshIndicator(
+              onRefresh: _handleManualRefresh,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppConstants.defaultPadding),
+                  child: Column(
+                    children: [
+                      if (state.showBatteryCard) _battery.buildBatteryCard(context),
+                      // Single calm banner (no animations) to reduce cognitive load.
+                      CalmStatusBanner(state: state, studentId: widget.studentId),
+                      if (state.isSyncing)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              SizedBox(width: 8),
+                              Text('Syncing...'),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
           );
         },
       ),
     );
+  }
+
+  /// Handle manual refresh - sync state with backend
+  Future<void> _handleManualRefresh() async {
+    if (_state.isSyncing) return;
+    
+    _state.setIsSyncing(true);
+    
+    try {
+      AppLogger.info('🔄 Manual refresh triggered');
+      
+      // Re-sync state with backend
+      await _sync.syncStateOnStartup(
+        loadCooldownInfo: _helpers.loadCooldownInfo,
+        startConfirmationTimer: _timers.startConfirmationTimer,
+        showSnackBar: _helpers.showSnackBar,
+      );
+      
+      _helpers.showSnackBar('✅ Synced successfully');
+    } catch (e) {
+      AppLogger.warning('⚠️ Manual refresh failed', error: e);
+      _helpers.showSnackBar('⚠️ Sync failed. Please try again.');
+    } finally {
+      _state.setIsSyncing(false);
+    }
   }
 }

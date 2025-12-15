@@ -59,6 +59,9 @@ class HomeScreenCallbacks {
           case 'failed':
             _handleFailedState(classId);
             break;
+          case 'queued':
+            _handleQueuedState(classId);
+            break;
           default:
             _handleDefaultState();
         }
@@ -164,6 +167,25 @@ class HomeScreenCallbacks {
         '❌ Attendance cancelled - you left the classroom too early!');
     state.logger.warning(
         '🚫 Attendance cancelled for Class $classId (left during waiting period)');
+  }
+
+  /// Handle queued state (confirmation saved for offline sync)
+  void _handleQueuedState(String classId) {
+    state.logger.info('📤 Queued state: $classId');
+
+    state.update((state) {
+      state.beaconStatusType = BeaconStatusType.confirming;
+      state.beaconStatus =
+          '📤 Attendance queued for Class $classId!\nWill sync automatically when you\'re back online.';
+      state.isAwaitingConfirmation = false;
+      state.confirmationTimer?.cancel();
+      state.remainingSeconds = 0;
+      state.isCheckingIn = false;
+    });
+
+    helpers.showSnackBar(
+        '📤 No network - attendance queued. Will sync when online.');
+    state.logger.info('📤 Attendance queued for offline sync: $classId');
   }
 
   /// Handle device mismatch (account linked to another device)

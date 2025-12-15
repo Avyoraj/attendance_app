@@ -6,6 +6,8 @@ import 'http_service.dart';
 import 'beacon_service.dart'; // For proximity verification
 import 'device_id_service.dart';
 import '../config/log_config.dart';
+import 'local_database_service.dart';
+import 'connectivity_service.dart';
 
 /// Service for handling two-step attendance confirmation
 /// Step 1: Provisional check-in (immediate)
@@ -39,6 +41,8 @@ class AttendanceConfirmationService {
   Function(String studentId, String classId)? onConfirmationSuccess;
   // Callback for confirmation failure
   Function(String studentId, String classId)? onConfirmationFailure;
+  // Callback for confirmation queued (offline retry)
+  Function(String studentId, String classId)? onConfirmationQueued;
 
   /// Schedule confirmation for a provisional attendance
   /// Will auto-confirm after 10 minutes if still in beacon range
@@ -115,16 +119,22 @@ class AttendanceConfirmationService {
 
   /// Execute the confirmation (called by timer)
   /// ✅ NEW: Validates RSSI before confirming
+  /// ✅ ROBUST: Queues failed network requests for retry when connectivity returns
   Future<void> _executeConfirmation() async {
     if (_pendingStudentId == null || _pendingClassId == null) {
       _logger.w('⚠️ No pending confirmation to execute');
       return;
     }
 
-    try {
-      _logger.i('✅ Executing confirmation for $_pendingStudentId');
+    // Capture values before any async operation clears them
+    final studentId = _pendingStudentId!;
+    final classId = _pendingClassId!;
+    final attendanceId = _pendingAttendanceId;
 
-      // � Hard gate: require that a REAL beacon packet was seen very recently
+    try {
+      _logger.i('✅ Executing confirmation for $studentId');
+
+      // 🔒 Hard gate: require that a REAL beacon packet was seen very recently
       // This prevents confirmations when the beacon is turned off or Bluetooth is disabled
       final recentlyVisible = beaconService.wasBeaconSeenRecently(
         maxAge: AppConstants.confirmationBeaconVisibilityMaxAge,
@@ -134,13 +144,13 @@ class AttendanceConfirmationService {
             '⚠️ Beacon not recently visible (>${AppConstants.confirmationBeaconVisibilityMaxAge.inSeconds}s) — cancelling provisional');
         await _cancelProvisionalAttendance();
         if (onConfirmationFailure != null) {
-          onConfirmationFailure!(_pendingStudentId!, _pendingClassId!);
+          onConfirmationFailure!(studentId, classId);
         }
         _clearPendingConfirmation();
         return;
       }
 
-      // �🔍 CRITICAL: Run a short final proximity gate to avoid last-moment false positives
+      // 🔍 CRITICAL: Run a short final proximity gate to avoid last-moment false positives
       // We sample RAW RSSI for ~2 seconds and require at least two consecutive valid samples.
       final gateOk = await _finalProximityGate(
         windowSeconds: 2,
@@ -150,21 +160,30 @@ class AttendanceConfirmationService {
         _logger.w('⚠️ Final proximity gate FAILED — cancelling provisional');
         await _cancelProvisionalAttendance();
         if (onConfirmationFailure != null) {
-          onConfirmationFailure!(_pendingStudentId!, _pendingClassId!);
+          onConfirmationFailure!(studentId, classId);
         }
         _clearPendingConfirmation();
         return;
       }
       _logger.i('✅ Final proximity gate PASSED');
 
+      // 🌐 NETWORK RESILIENCE: Check connectivity before attempting HTTP call
+      final isOnline = ConnectivityService().isOnline;
+      if (!isOnline) {
+        _logger.w('⚠️ No network connectivity — queueing confirmation for retry');
+        await _queueConfirmationForRetry(studentId: studentId, classId: classId, attendanceId: attendanceId);
+        _clearPendingConfirmation();
+        return;
+      }
+
       // Retrieve deviceId for confirmation integrity
       final deviceId = await DeviceIdService().getDeviceId();
 
       final response = await _httpService.confirmAttendance(
-        studentId: _pendingStudentId!,
-        classId: _pendingClassId!,
+        studentId: studentId,
+        classId: classId,
         deviceId: deviceId,
-        attendanceId: _pendingAttendanceId,
+        attendanceId: attendanceId,
       );
 
       if (response['success'] == true) {
@@ -172,7 +191,7 @@ class AttendanceConfirmationService {
 
         // Notify via callback
         if (onConfirmationSuccess != null) {
-          onConfirmationSuccess!(_pendingStudentId!, _pendingClassId!);
+          onConfirmationSuccess!(studentId, classId);
         }
 
         // TODO: Show notification to user
@@ -181,21 +200,75 @@ class AttendanceConfirmationService {
         // TODO: Update local database status
         // await _updateLocalAttendanceStatus();
       } else {
-        _logger.e('❌ Confirmation failed: ${response['error']}');
-        // Notify via callback
+        // Backend rejected the confirmation (e.g., already confirmed, invalid state)
+        // This is NOT a network issue — don't retry
+        _logger.e('❌ Confirmation rejected by backend: ${response['error']}');
         if (onConfirmationFailure != null) {
-          onConfirmationFailure!(_pendingStudentId!, _pendingClassId!);
+          onConfirmationFailure!(studentId, classId);
         }
       }
     } catch (e) {
       _logger.e('❌ Error confirming attendance: $e');
-      // Notify via callback
-      if (onConfirmationFailure != null) {
-        onConfirmationFailure!(_pendingStudentId!, _pendingClassId!);
+      
+      // 🌐 NETWORK RESILIENCE: Queue for retry if this looks like a network error
+      // (Network errors: SocketException, TimeoutException, etc.)
+      if (_isNetworkError(e)) {
+        _logger.w('🔄 Network error detected — queueing confirmation for retry when online');
+        await _queueConfirmationForRetry(studentId: studentId, classId: classId, attendanceId: attendanceId);
+      } else {
+        // Non-network error (parsing, unexpected response, etc.) — notify failure
+        if (onConfirmationFailure != null) {
+          onConfirmationFailure!(studentId, classId);
+        }
       }
     } finally {
       _clearPendingConfirmation();
     }
+  }
+
+  /// Queue a failed confirmation to be retried when network is available
+  /// Uses the existing LocalDatabaseService pending_actions infrastructure
+  Future<void> _queueConfirmationForRetry({
+    required String studentId,
+    required String classId,
+    String? attendanceId,
+  }) async {
+    try {
+      await LocalDatabaseService().savePendingAction(
+        actionType: 'confirm',
+        studentId: studentId,
+        classId: classId,
+        payload: attendanceId != null ? {'attendanceId': attendanceId} : null,
+      );
+      _logger.i('📥 Confirmation queued for retry: $studentId / $classId');
+      
+      // Notify UI that confirmation was queued (not failed!)
+      if (onConfirmationQueued != null) {
+        onConfirmationQueued!(studentId, classId);
+      }
+      
+      // Register a one-time listener to trigger sync when connectivity returns
+      ConnectivityService().onNextReconnect(() async {
+        _logger.i('🌐 Connectivity restored — SyncService will process queued confirmations');
+        // SyncService already listens for connectivity changes and will auto-sync
+        // No additional action needed here
+      });
+    } catch (e) {
+      _logger.e('❌ Failed to queue confirmation for retry: $e');
+      // Even if queueing fails, don't block — student can retry manually
+    }
+  }
+
+  /// Determine if an exception is likely a network-related error
+  bool _isNetworkError(dynamic e) {
+    final errorString = e.toString().toLowerCase();
+    return errorString.contains('socket') ||
+        errorString.contains('timeout') ||
+        errorString.contains('network') ||
+        errorString.contains('connection') ||
+        errorString.contains('unreachable') ||
+        errorString.contains('failed host lookup') ||
+        errorString.contains('errno');
   }
 
   /// Verify student is still in acceptable beacon range

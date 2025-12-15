@@ -203,6 +203,10 @@ class HttpService {
     required List<Map<String, dynamic>> rssiData,
   }) async {
     try {
+      // Add device timestamp for server-side time sync
+      // This allows the backend to calculate clock offset and correct timestamps
+      final deviceTimestamp = DateTime.now().toUtc().toIso8601String();
+      
       final response = await post(
         url: ApiConstants.rssiStream,
         body: {
@@ -210,6 +214,7 @@ class HttpService {
           'classId': classId,
           'sessionDate': sessionDate.toIso8601String().split('T')[0],
           'rssiData': rssiData,
+          'deviceTimestamp': deviceTimestamp, // For clock drift correction
         },
       );
 

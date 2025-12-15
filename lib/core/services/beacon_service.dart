@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter_beacon/flutter_beacon.dart';
 import 'package:logger/logger.dart';
 import '../constants/app_constants.dart';
+import '../models/attendance_state.dart';
 import 'permission_service.dart';
 import 'device_id_service.dart';
 import 'http_service.dart';
@@ -40,6 +41,7 @@ class BeaconService {
     // Setup confirmation callbacks
     _confirmationService.onConfirmationSuccess = _handleConfirmationSuccess;
     _confirmationService.onConfirmationFailure = _handleConfirmationFailure;
+    _confirmationService.onConfirmationQueued = _handleConfirmationQueued;
   }
 
   final _logger = Logger();
@@ -483,6 +485,14 @@ class BeaconService {
     _cooldownManager.clearCooldown();
   }
 
+  /// Handle confirmation queued (offline - will retry when network returns)
+  void _handleConfirmationQueued(String studentId, String classId) {
+    _logger.i('📥 Confirmation queued for offline sync: $studentId / $classId');
+    // Notify UI via the existing callback mechanism
+    _stateManager.notifyStateChange('queued', studentId, classId);
+    // Note: We don't start cooldown here - that happens after successful sync
+  }
+
   // ========== PUBLIC API ==========
 
   /// Get current RSSI (with smoothing and grace period)
@@ -527,6 +537,14 @@ class BeaconService {
   Future<Map<String, dynamic>> syncStateFromBackend(String studentId) {
     return _syncHandler.syncStateFromBackend(studentId);
   }
+
+  /// 🆕 Stream of attendance state changes
+  /// Use with StreamBuilder for reactive UI updates that handle lifecycle automatically.
+  /// This prevents glitches when UI rebuilds (keyboard opens, screen rotates, etc.)
+  Stream<AttendanceState> get attendanceStateStream => _stateManager.stateStream;
+
+  /// 🆕 Get current attendance state synchronously (snapshot)
+  AttendanceState get currentAttendanceState => _stateManager.currentStateSnapshot;
 
   /// Set state change callback
   void setOnAttendanceStateChanged(

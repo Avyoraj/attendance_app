@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:attendance_app/features/attendance/screens/home_screen/home_screen_state.dart';
+import 'package:attendance_app/core/constants/app_constants.dart';
+import 'circular_confirmation_timer.dart';
 
 class HeroStatusCard extends StatelessWidget {
   final HomeScreenState state;
@@ -67,8 +69,11 @@ class HeroStatusCard extends StatelessWidget {
                   ),
                 ),
                 if (state.isAwaitingConfirmation && state.remainingSeconds > 0)
-                  _timerPill(
-                      context, colorScheme, state.getFormattedRemainingTime()),
+                  CompactConfirmationTimer(
+                    totalSeconds: AppConstants.secondCheckDelay.inSeconds,
+                    remainingSeconds: state.remainingSeconds,
+                    isActive: state.isAwaitingConfirmation,
+                  ),
               ],
             ),
             const SizedBox(height: 16),
@@ -99,31 +104,6 @@ class HeroStatusCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Icon(icon, color: color),
-    );
-  }
-
-  Widget _timerPill(
-      BuildContext context, ColorScheme colorScheme, String formatted) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.timer_outlined,
-              size: 16, color: colorScheme.onSecondaryContainer),
-          const SizedBox(width: 6),
-          Text(
-            formatted,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: colorScheme.onSecondaryContainer,
-                ),
-          ),
-        ],
-      ),
     );
   }
 

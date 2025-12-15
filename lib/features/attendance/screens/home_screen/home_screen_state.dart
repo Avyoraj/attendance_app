@@ -79,6 +79,16 @@ class HomeScreenState extends ChangeNotifier {
   // Cooldown refresh timer
   Timer? cooldownRefreshTimer;
 
+  // Manual sync state
+  bool isSyncing = false;
+
+  /// Set syncing state and notify listeners
+  void setIsSyncing(bool value) {
+    update((state) {
+      state.isSyncing = value;
+    });
+  }
+
   /// Apply updates and notify listeners
   void update(void Function(HomeScreenState state) updates) {
     if (_isDisposed) return;

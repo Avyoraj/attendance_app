@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'connectivity_service.dart';
 import 'local_database_service.dart';
 import 'http_service.dart';
@@ -108,12 +109,22 @@ class SyncService {
         final type = action['action_type'] as String;
         final studentId = action['student_id'] as String;
         final classId = action['class_id'] as String;
+        final payloadStr = action['payload'] as String?;
+        Map<String, dynamic>? payload;
+        if (payloadStr != null && payloadStr.isNotEmpty) {
+          try {
+            payload = jsonDecode(payloadStr) as Map<String, dynamic>;
+          } catch (_) {
+            // Ignore decode errors
+          }
+        }
 
         final success = await _processAction(
           id: id,
           type: type,
           studentId: studentId,
           classId: classId,
+          payload: payload,
         );
 
         if (!success) {
@@ -145,15 +156,18 @@ class SyncService {
     required String type,
     required String studentId,
     required String classId,
+    Map<String, dynamic>? payload,
   }) async {
     try {
       bool success = false;
       if (type == 'confirm') {
         final deviceId = await DeviceIdService().getDeviceId();
+        final attendanceId = payload?['attendanceId'] as String?;
         final result = await _httpService.confirmAttendance(
           studentId: studentId,
           classId: classId,
           deviceId: deviceId,
+          attendanceId: attendanceId,
         );
         success = result['success'] == true;
       } else if (type == 'cancel') {
