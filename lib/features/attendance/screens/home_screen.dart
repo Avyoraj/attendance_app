@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:attendance_app/core/utils/app_logger.dart';
 import 'package:attendance_app/core/services/device_id_service.dart';
-// Removed HeroStatusCard in favor of a calmer, single status banner.
-// import '../widgets/hero_status_card.dart';
 import '../widgets/calm_status_banner.dart';
+import '../widgets/home_widgets.dart';
 import '../../../core/constants/app_constants.dart';
 import 'home_screen/home_screen_state.dart';
 import 'home_screen/home_screen_callbacks.dart';
@@ -175,10 +174,44 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(AppConstants.defaultPadding),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Battery optimization card (if needed)
                       if (state.showBatteryCard) _battery.buildBatteryCard(context),
-                      // Single calm banner (no animations) to reduce cognitive load.
+                      
+                      // Today's status card
+                      TodayStatusCard(
+                        status: state.todayStatus,
+                        className: state.todayClassName,
+                        checkInTime: state.todayCheckInTime,
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Beacon status banner
                       CalmStatusBanner(state: state, studentId: widget.studentId),
+                      const SizedBox(height: 16),
+                      
+                      // Active session card
+                      ActiveSessionCard(
+                        isActive: state.hasActiveSession,
+                        className: state.activeClassName,
+                        teacherName: state.activeTeacherName,
+                        roomName: state.activeRoomName,
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Weekly stats card
+                      WeeklyStatsCard(
+                        confirmed: state.weeklyConfirmed,
+                        total: state.weeklyTotal,
+                        percentage: state.weeklyPercentage,
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Recent history
+                      RecentHistoryList(history: state.recentHistory),
+                      
+                      // Syncing indicator
                       if (state.isSyncing)
                         const Padding(
                           padding: EdgeInsets.only(top: 16),
@@ -195,6 +228,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                         ),
+                      
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),

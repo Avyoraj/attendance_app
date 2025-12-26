@@ -86,6 +86,8 @@ class CalmStatusBanner extends StatelessWidget {
         return Icons.schedule;
       case BeaconStatusType.deviceLocked:
         return Icons.lock_outline;
+      case BeaconStatusType.noSession:
+        return Icons.event_busy;
       case BeaconStatusType.info:
         return Icons.bluetooth_searching;
     }

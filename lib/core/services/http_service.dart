@@ -279,6 +279,118 @@ class HttpService {
     }
   }
 
+  /// Get active session by beacon (for Session Activator integration)
+  /// Returns the active class session for a given beacon
+  Future<Map<String, dynamic>> getActiveSessionByBeacon({
+    required int major,
+    required int minor,
+  }) async {
+    try {
+      final response = await get(
+        url: ApiConstants.activeSessionByBeacon(major, minor),
+      );
+
+      _logger.i('Get active session response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'hasActiveSession': data['hasActiveSession'] ?? false,
+          'session': data['session'],
+          'classId': data['session']?['class_id'] ?? data['session']?['classId'],
+          'className': data['session']?['class_name'] ?? data['session']?['className'],
+          'teacherName': data['session']?['teacher_name'] ?? data['session']?['teacherName'],
+          'roomId': data['session']?['room_id'] ?? data['session']?['roomId'],
+        };
+      } else {
+        return {
+          'success': false,
+          'hasActiveSession': false,
+          'error': 'No active session',
+        };
+      }
+    } catch (e) {
+      _logger.e('Get active session error: $e');
+      return {
+        'success': false,
+        'hasActiveSession': false,
+        'error': 'NETWORK_ERROR',
+        'message': e.toString(),
+      };
+    }
+  }
+
+  /// Get student summary for HomeScreen
+  /// Returns today's attendance, weekly stats, and recent history
+  Future<Map<String, dynamic>> getStudentSummary({
+    required String studentId,
+  }) async {
+    try {
+      final response = await get(
+        url: ApiConstants.studentSummary(studentId),
+      );
+
+      _logger.i('Get student summary response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'studentId': data['studentId'],
+          'today': data['today'],
+          'weekStats': data['weekStats'],
+          'recentHistory': data['recentHistory'] ?? [],
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to fetch summary',
+        };
+      }
+    } catch (e) {
+      _logger.e('Get student summary error: $e');
+      return {
+        'success': false,
+        'error': 'NETWORK_ERROR',
+        'message': e.toString(),
+      };
+    }
+  }
+
+  /// Get student attendance history
+  Future<Map<String, dynamic>> getStudentHistory({
+    required String studentId,
+    int days = 30,
+  }) async {
+    try {
+      final response = await get(
+        url: ApiConstants.studentHistory(studentId, days: days),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'studentId': data['studentId'],
+          'attendance': data['attendance'] ?? [],
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to fetch history',
+        };
+      }
+    } catch (e) {
+      _logger.e('Get student history error: $e');
+      return {
+        'success': false,
+        'error': 'NETWORK_ERROR',
+        'message': e.toString(),
+      };
+    }
+  }
+
   // Static method for background service (legacy)
   static Future<http.Response> submitAttendance(String studentId, String classId) async {
     const String apiUrl = 'https://your-backend-url.vercel.app/api/attendance';

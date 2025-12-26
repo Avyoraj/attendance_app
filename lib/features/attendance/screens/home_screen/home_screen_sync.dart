@@ -44,6 +44,9 @@ class HomeScreenSync {
 
       state.logger.info('🔄 Syncing attendance state from backend...');
 
+      // Fetch student summary for enhanced HomeScreen (fire and forget)
+      _fetchStudentSummary();
+
       // Add 5-second timeout to prevent infinite waiting
       final syncResult =
           await state.beaconService.syncStateFromBackend(studentId).timeout(
@@ -350,6 +353,29 @@ class HomeScreenSync {
         );
         state.logger.info('📥 Cancel action queued for retry');
       }
+    }
+  }
+
+  /// Fetch student summary data for enhanced HomeScreen
+  /// 
+  /// Fetches today's status, weekly stats, and recent history
+  /// Updates state asynchronously without blocking main sync
+  Future<void> _fetchStudentSummary() async {
+    try {
+      state.logger.info('📊 Fetching student summary for $studentId...');
+      
+      final result = await state.httpService.getStudentSummary(
+        studentId: studentId,
+      );
+
+      if (result['success'] == true) {
+        state.updateSummary(result);
+        state.logger.info('✅ Student summary loaded successfully');
+      } else {
+        state.logger.warning('⚠️ Failed to fetch student summary: ${result['error']}');
+      }
+    } catch (e) {
+      state.logger.error('❌ Error fetching student summary', e);
     }
   }
 }

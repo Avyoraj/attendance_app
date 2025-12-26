@@ -11,6 +11,7 @@ import 'attendance_confirmation_service.dart';
 import 'rssi_stream_service.dart';
 import 'simple_notification_service.dart';
 import 'settings_service.dart';
+import 'session_service.dart';
 
 // Import modular components
 import 'beacon_service/beacon_rssi_analyzer.dart';
@@ -53,6 +54,7 @@ class BeaconService {
   final AttendanceConfirmationService _confirmationService =
       AttendanceConfirmationService();
   final RSSIStreamService _rssiStreamService = RSSIStreamService();
+  final SessionService _sessionService = SessionService();
 
   // Modular components
   late final BeaconRssiAnalyzer _rssiAnalyzer;
@@ -421,18 +423,41 @@ class BeaconService {
   }
 
   /// Submit provisional check-in to backend
+  /// First checks if there's an active session for the beacon
   Future<void> _submitProvisionalCheckIn(
       String studentId, String classId) async {
     try {
+      // Get beacon info for session lookup
+      final beaconMajor = 1; // Default major from ESP32 config
+      final beaconMinor = int.tryParse(classId) ?? 101;
+
+      // Check for active session first (Session Activator integration)
+      final session = await _sessionService.getActiveSession(
+        beaconMajor: beaconMajor,
+        beaconMinor: beaconMinor,
+      );
+
+      if (session == null) {
+        _logger.w('⚠️ No active session for beacon $beaconMajor:$beaconMinor');
+        _stateManager.setStateAndNotify('no_session', studentId, classId);
+        // Clear cooldown so student can retry when session starts
+        _cooldownManager.clearCooldown();
+        return;
+      }
+
+      // Use the class ID from the active session
+      final activeClassId = session['classId'] as String? ?? classId;
+      _logger.i('✅ Active session found: ${session['className']} (Class: $activeClassId)');
+
       final deviceId = await _deviceIdService.getDeviceId();
       final rssi = _rssiAnalyzer.currentRssi ?? -70;
 
       _logger.i(
-          '📱 Submitting check-in: Student=$studentId, Class=$classId, Device=$deviceId, RSSI=$rssi');
+          '📱 Submitting check-in: Student=$studentId, Class=$activeClassId, Device=$deviceId, RSSI=$rssi');
 
       final result = await _httpService.checkIn(
         studentId: studentId,
-        classId: classId,
+        classId: activeClassId,
         deviceId: deviceId,
         rssi: rssi,
       );
@@ -447,14 +472,14 @@ class BeaconService {
           _confirmationService.scheduleConfirmation(
             attendanceId: attendanceId,
             studentId: studentId,
-            classId: classId,
+            classId: activeClassId,
             // New check-in: full delay, so no override
           );
 
           // Start RSSI streaming
           _rssiStreamService.startStreaming(
             studentId: studentId,
-            classId: classId,
+            classId: activeClassId,
             sessionDate: DateTime.now(),
           );
 

@@ -62,6 +62,9 @@ class HomeScreenCallbacks {
           case 'queued':
             _handleQueuedState(classId);
             break;
+          case 'no_session':
+            _handleNoSessionState(classId);
+            break;
           default:
             _handleDefaultState();
         }
@@ -230,6 +233,21 @@ class HomeScreenCallbacks {
     helpers
         .showSnackBar('⚠️ Check-in failed. Try moving closer to the beacon.');
     state.logger.error('❌ Check-in failed for Class $classId');
+  }
+
+  /// Handle no session state (beacon detected but no active class session)
+  void _handleNoSessionState(String classId) {
+    state.logger.info('📭 No session state: $classId');
+
+    state.update((state) {
+      state.beaconStatusType = BeaconStatusType.noSession;
+      state.beaconStatus =
+          '📭 No Active Class Session\nBeacon detected but no class is currently in session.\nWait for your teacher to start the session.';
+      state.isCheckingIn = false;
+    });
+
+    helpers.showSnackBar('📭 No active class session. Wait for teacher to start.');
+    state.logger.info('📭 No active session for beacon $classId');
   }
 
   /// Handle default/scanning state

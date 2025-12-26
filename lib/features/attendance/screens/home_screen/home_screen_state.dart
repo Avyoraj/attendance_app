@@ -18,6 +18,7 @@ enum BeaconStatusType {
   failed,
   cooldown,
   deviceLocked,
+  noSession,  // No active class session for this beacon
   info,
 }
 
@@ -82,11 +83,90 @@ class HomeScreenState extends ChangeNotifier {
   // Manual sync state
   bool isSyncing = false;
 
+  // Student summary data (for enhanced HomeScreen)
+  Map<String, dynamic>? studentSummary;
+  List<Map<String, dynamic>> recentHistory = [];
+  int weeklyConfirmed = 0;
+  int weeklyTotal = 0;
+  int weeklyPercentage = 0;
+  String todayStatus = 'none'; // 'confirmed', 'provisional', 'none'
+  String? todayClassName;
+  String? todayCheckInTime;
+
+  // Active session data
+  bool hasActiveSession = false;
+  String? activeClassName;
+  String? activeTeacherName;
+  String? activeRoomName;
+
   /// Set syncing state and notify listeners
   void setIsSyncing(bool value) {
     update((state) {
       state.isSyncing = value;
     });
+  }
+
+  /// Update student summary data
+  void updateSummary(Map<String, dynamic> summary) {
+    update((state) {
+      state.studentSummary = summary;
+      
+      // Parse today's status
+      final today = summary['today'] as Map<String, dynamic>?;
+      if (today != null) {
+        final attendance = today['attendance'] as List? ?? [];
+        if (attendance.isNotEmpty) {
+          final latest = attendance.first as Map<String, dynamic>;
+          state.todayStatus = latest['status'] ?? 'none';
+          state.todayClassName = latest['class_id'] ?? latest['classId'];
+          state.todayCheckInTime = _formatTime(latest['check_in_time'] ?? latest['checkInTime']);
+        } else {
+          state.todayStatus = 'none';
+          state.todayClassName = null;
+          state.todayCheckInTime = null;
+        }
+      }
+      
+      // Parse weekly stats
+      final weekStats = summary['weekStats'] as Map<String, dynamic>?;
+      if (weekStats != null) {
+        state.weeklyConfirmed = weekStats['confirmed'] ?? 0;
+        state.weeklyTotal = weekStats['total'] ?? 0;
+        state.weeklyPercentage = weekStats['percentage'] ?? 0;
+      }
+      
+      // Parse recent history
+      state.recentHistory = List<Map<String, dynamic>>.from(
+        summary['recentHistory'] ?? []
+      );
+    });
+  }
+
+  /// Update active session data
+  void updateActiveSession(Map<String, dynamic>? session) {
+    update((state) {
+      if (session != null && session['hasActiveSession'] == true) {
+        state.hasActiveSession = true;
+        state.activeClassName = session['className'];
+        state.activeTeacherName = session['teacherName'];
+        state.activeRoomName = session['roomId'];
+      } else {
+        state.hasActiveSession = false;
+        state.activeClassName = null;
+        state.activeTeacherName = null;
+        state.activeRoomName = null;
+      }
+    });
+  }
+
+  String? _formatTime(String? isoTime) {
+    if (isoTime == null) return null;
+    try {
+      final dt = DateTime.parse(isoTime);
+      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return null;
+    }
   }
 
   /// Apply updates and notify listeners
