@@ -1,182 +1,161 @@
-import 'package:flutter/services.dart';
-import '../utils/schedule_utils.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'logger_service.dart';
 import 'dart:async';
 
-/// Enhanced notification service with lock screen support and live cooldown notifications
+/// Simplified notification service - only essential notifications
+/// Removed: live cooldown updates, constant spam
+/// Kept: success, cancelled, error notifications (one-time)
 class NotificationService {
-  static const platform =
-      MethodChannel('com.example.attendance_app/beacon_service');
   static final LoggerService _logger = LoggerService();
+  static FlutterLocalNotificationsPlugin? _notifications;
+  static bool _initialized = false;
 
-  static Timer? _cooldownNotificationTimer;
-  static DateTime? _cooldownEndTime;
+  /// Initialize the notification plugin
+  static Future<void> _ensureInitialized() async {
+    if (_initialized) return;
+    
+    _notifications = FlutterLocalNotificationsPlugin();
+    
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidSettings);
+    
+    await _notifications!.initialize(initSettings);
+    
+    // Create notification channels
+    final androidPlugin = _notifications!
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    
+    // Success channel (high importance for confirmed attendance)
+    await androidPlugin?.createNotificationChannel(const AndroidNotificationChannel(
+      'attendance_success',
+      'Attendance Success',
+      description: 'Attendance confirmation notifications',
+      importance: Importance.high,
+      playSound: true,
+    ));
+    
+    // Info channel (low importance for status updates)
+    await androidPlugin?.createNotificationChannel(const AndroidNotificationChannel(
+      'attendance_info',
+      'Attendance Info',
+      description: 'Attendance status notifications',
+      importance: Importance.low,
+      playSound: false,
+    ));
+    
+    _initialized = true;
+  }
 
-  /// Show success notification (visible on lock screen)
+  /// Show success notification when attendance is confirmed
   static Future<void> showSuccessNotification({
     required String classId,
     required String message,
   }) async {
     try {
-      await platform.invokeMethod('showSuccessNotificationEnhanced', {
-        'title': '✅ Attendance Confirmed!',
-        'message': '🎓 Class $classId\n$message',
-        'classId': classId,
-      });
-      _logger.info('✅ Success notification shown (lock screen enabled)');
+      await _ensureInitialized();
+      
+      const androidDetails = AndroidNotificationDetails(
+        'attendance_success',
+        'Attendance Success',
+        channelDescription: 'Attendance confirmation notifications',
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+        autoCancel: true,
+      );
+      
+      await _notifications?.show(
+        100, // Fixed ID for success
+        '✅ Attendance Confirmed!',
+        'Class $classId • $message',
+        const NotificationDetails(android: androidDetails),
+      );
+      
+      _logger.info('✅ Success notification shown for $classId');
     } catch (e) {
       _logger.error('❌ Failed to show success notification', e);
     }
   }
 
-  /// Show cooldown notification with live countdown
+  /// Show cooldown notification - SIMPLIFIED: just one notification, no live updates
   static Future<void> showCooldownNotification({
     required String classId,
     required DateTime classStartTime,
   }) async {
-    try {
-      final now = DateTime.now();
-      _cooldownEndTime = ScheduleUtils.getCooldownEndTime(classStartTime);
-      final classEndTime = ScheduleUtils.getClassEndTime(classStartTime);
-
-      // Show initial notification
-      final scheduleInfo = ScheduleUtils.getScheduleAwareCooldownInfo(
-        classStartTime: classStartTime,
-        now: now,
-      );
-
-      await _updateCooldownNotification(scheduleInfo, classId, classEndTime);
-
-      // Start live updates (every minute)
-      _startCooldownNotificationUpdates(classStartTime, classId);
-
-      _logger.info('🔔 Cooldown notification started for Class $classId');
-    } catch (e) {
-      _logger.error('❌ Failed to show cooldown notification', e);
-    }
+    // DISABLED: No more cooldown notification spam
+    // The success notification is enough
+    _logger.info('ℹ️ Cooldown notification skipped (simplified)');
   }
 
-  /// Start live cooldown notification updates
-  static void _startCooldownNotificationUpdates(
-      DateTime classStartTime, String classId) {
-    // Cancel existing timer if any
-    _cooldownNotificationTimer?.cancel();
-
-    _cooldownNotificationTimer =
-        Timer.periodic(const Duration(minutes: 1), (timer) async {
-      try {
-        final now = DateTime.now();
-        final classEndTime = ScheduleUtils.getClassEndTime(classStartTime);
-
-        // Stop timer if cooldown ended
-        if (_cooldownEndTime != null && now.isAfter(_cooldownEndTime!)) {
-          _logger.info('⏱️ Cooldown ended, stopping notification updates');
-          cancelCooldownNotification();
-          return;
-        }
-
-        // Update notification with current time
-        final scheduleInfo = ScheduleUtils.getScheduleAwareCooldownInfo(
-          classStartTime: classStartTime,
-          now: now,
-        );
-
-        await _updateCooldownNotification(scheduleInfo, classId, classEndTime);
-      } catch (e) {
-        _logger.error('❌ Error updating cooldown notification', e);
-      }
-    });
-  }
-
-  /// Update cooldown notification with current info
-  static Future<void> _updateCooldownNotification(
-    Map<String, dynamic> scheduleInfo,
-    String classId,
-    DateTime classEndTime,
-  ) async {
-    try {
-      final now = DateTime.now();
-      final nextClassTime = ScheduleUtils.getNextClassStartTime(classEndTime);
-
-      String title;
-      String message;
-
-      if (scheduleInfo['classEnded'] == false) {
-        // Class still ongoing
-        title = '🕐 Cooldown Active';
-        message =
-            '🎓 Class $classId ends at ${scheduleInfo['classEndTimeFormatted']}\n'
-            '⏰ Next check-in: ${scheduleInfo['remainingTimeFormatted']}';
-      } else {
-        // Class ended, waiting for next class
-        final timeUntilNext = nextClassTime.difference(now);
-        final nextClassFormatted = ScheduleUtils.formatTime(nextClassTime);
-        final timeUntilNextFormatted =
-            ScheduleUtils.formatTimeRemaining(timeUntilNext);
-
-        title = '⏳ Waiting for Next Class';
-        message = '🎓 Next class at $nextClassFormatted\n'
-            '⏰ Available $timeUntilNextFormatted';
-      }
-
-      await platform.invokeMethod('showCooldownNotificationEnhanced', {
-        'title': title,
-        'message': message,
-        'classId': classId,
-        'remainingMinutes': scheduleInfo['remainingMinutes'],
-      });
-    } catch (e) {
-      _logger.error('❌ Failed to update cooldown notification', e);
-    }
-  }
-
-  /// Show cancelled notification with next class info
+  /// Show cancelled notification
   static Future<void> showCancelledNotification({
     required String classId,
     required DateTime cancelledTime,
   }) async {
     try {
-      final now = DateTime.now();
-      final cancelledInfo = ScheduleUtils.getScheduleAwareCancelledInfo(
-        cancelledTime: cancelledTime,
-        now: now,
+      await _ensureInitialized();
+      
+      const androidDetails = AndroidNotificationDetails(
+        'attendance_info',
+        'Attendance Info',
+        channelDescription: 'Attendance status notifications',
+        importance: Importance.defaultImportance,
+        priority: Priority.defaultPriority,
+        icon: '@mipmap/ic_launcher',
+        autoCancel: true,
       );
-
-      String message;
-      if (cancelledInfo['classEnded'] == false) {
-        message =
-            '❌ Current class ends at ${cancelledInfo['classEndTimeFormatted']}\n'
-            '🎓 Try again in next class at ${cancelledInfo['nextClassTimeFormatted']}\n'
-            '⏰ ${cancelledInfo['timeUntilNextFormatted']}';
-      } else {
-        message =
-            '🎓 Next class at ${cancelledInfo['nextClassTimeFormatted']}\n'
-            '⏰ ${cancelledInfo['timeUntilNextFormatted']}';
-      }
-
-      await platform.invokeMethod('showCancelledNotificationEnhanced', {
-        'title': '❌ Attendance Cancelled',
-        'message': message,
-        'classId': classId,
-      });
-
-      _logger.info('🔔 Cancelled notification shown for Class $classId');
+      
+      await _notifications?.show(
+        101, // Fixed ID for cancelled
+        '❌ Attendance Cancelled',
+        'Class $classId • Left before confirmation',
+        const NotificationDetails(android: androidDetails),
+      );
+      
+      _logger.info('❌ Cancelled notification shown for $classId');
     } catch (e) {
       _logger.error('❌ Failed to show cancelled notification', e);
     }
   }
 
-  /// Cancel cooldown notification and stop updates
-  static void cancelCooldownNotification() {
-    _cooldownNotificationTimer?.cancel();
-    _cooldownNotificationTimer = null;
-    _cooldownEndTime = null;
-    _logger.info('🔕 Cooldown notification cancelled');
+  /// Show error notification (proxy blocked, device mismatch)
+  static Future<void> showErrorNotification({
+    required String title,
+    required String message,
+  }) async {
+    try {
+      await _ensureInitialized();
+      
+      const androidDetails = AndroidNotificationDetails(
+        'attendance_info',
+        'Attendance Info',
+        channelDescription: 'Attendance status notifications',
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+        autoCancel: true,
+      );
+      
+      await _notifications?.show(
+        102, // Fixed ID for errors
+        title,
+        message,
+        const NotificationDetails(android: androidDetails),
+      );
+      
+      _logger.info('🚫 Error notification shown: $title');
+    } catch (e) {
+      _logger.error('❌ Failed to show error notification', e);
+    }
   }
 
-  /// Check if cooldown notification is active
+  /// Cancel cooldown notification - no-op now
+  static void cancelCooldownNotification() {
+    // No-op - cooldown notifications disabled
+  }
+
+  /// Check if cooldown notification is active - always false now
   static bool isCooldownNotificationActive() {
-    return _cooldownNotificationTimer != null &&
-        _cooldownNotificationTimer!.isActive;
+    return false;
   }
 }

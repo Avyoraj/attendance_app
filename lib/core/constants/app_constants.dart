@@ -70,7 +70,8 @@ class AppConstants {
     // 🔒 Confirmation-time beacon visibility requirement
     // Require that a real beacon packet was seen very recently at the moment of confirmation
     // This prevents confirmations when the beacon is turned off or Bluetooth is disabled
-    static const Duration confirmationBeaconVisibilityMaxAge = Duration(seconds: 2);
+    // 📱 Increased from 2s to 10s to handle locked screen scenarios where BLE scanning is throttled
+    static const Duration confirmationBeaconVisibilityMaxAge = Duration(seconds: 10);
 
   // UI Constants
   static const double defaultPadding = 16.0;

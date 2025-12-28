@@ -33,9 +33,19 @@ enum BeaconStatusType {
 /// - Timer references
 /// - Cooldown tracking
 /// - Battery optimization state
+/// - Debounced updates to prevent glitchy UI
 class HomeScreenState extends ChangeNotifier {
   bool _isDisposed = false;
   bool get isDisposed => _isDisposed;
+  
+  // Debounce timer to batch rapid state updates
+  Timer? _debounceTimer;
+  bool _pendingNotify = false;
+  
+  // Loading states for cards
+  bool isLoadingSummary = true;
+  bool isLoadingSession = true;
+  
   // Service instances
   final BeaconService beaconService = BeaconService();
   final AttendanceService attendanceService = AttendanceService();
@@ -109,6 +119,7 @@ class HomeScreenState extends ChangeNotifier {
   /// Update student summary data
   void updateSummary(Map<String, dynamic> summary) {
     update((state) {
+      state.isLoadingSummary = false;
       state.studentSummary = summary;
       
       // Parse today's status
@@ -145,6 +156,7 @@ class HomeScreenState extends ChangeNotifier {
   /// Update active session data
   void updateActiveSession(Map<String, dynamic>? session) {
     update((state) {
+      state.isLoadingSession = false;
       if (session != null && session['hasActiveSession'] == true) {
         state.hasActiveSession = true;
         state.activeClassName = session['className'];
@@ -159,6 +171,20 @@ class HomeScreenState extends ChangeNotifier {
     });
   }
 
+  /// Mark summary as loaded (even if empty)
+  void markSummaryLoaded() {
+    update((state) {
+      state.isLoadingSummary = false;
+    });
+  }
+
+  /// Mark session as loaded (even if no active session)
+  void markSessionLoaded() {
+    update((state) {
+      state.isLoadingSession = false;
+    });
+  }
+
   String? _formatTime(String? isoTime) {
     if (isoTime == null) return null;
     try {
@@ -169,17 +195,35 @@ class HomeScreenState extends ChangeNotifier {
     }
   }
 
-  /// Apply updates and notify listeners
-  void update(void Function(HomeScreenState state) updates) {
+  /// Apply updates and notify listeners with debouncing
+  /// This prevents rapid UI rebuilds when multiple state changes happen quickly
+  void update(void Function(HomeScreenState state) updates, {bool immediate = false}) {
     if (_isDisposed) return;
     updates(this);
     if (_isDisposed) return;
-    notifyListeners();
+    
+    if (immediate) {
+      // Immediate update (for critical state changes)
+      _debounceTimer?.cancel();
+      _pendingNotify = false;
+      notifyListeners();
+    } else {
+      // Debounced update (batches rapid changes)
+      _pendingNotify = true;
+      _debounceTimer?.cancel();
+      _debounceTimer = Timer(const Duration(milliseconds: 50), () {
+        if (!_isDisposed && _pendingNotify) {
+          _pendingNotify = false;
+          notifyListeners();
+        }
+      });
+    }
   }
 
   /// Dispose of all timers and subscriptions
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     confirmationTimer?.cancel();
     cooldownRefreshTimer?.cancel();
     // Important: Do NOT dispose the global BeaconService here.

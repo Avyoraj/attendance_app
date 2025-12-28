@@ -184,6 +184,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         status: state.todayStatus,
                         className: state.todayClassName,
                         checkInTime: state.todayCheckInTime,
+                        isLoading: state.isLoadingSummary,
                       ),
                       const SizedBox(height: 16),
                       
@@ -205,6 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         confirmed: state.weeklyConfirmed,
                         total: state.weeklyTotal,
                         percentage: state.weeklyPercentage,
+                        isLoading: state.isLoadingSummary,
                       ),
                       const SizedBox(height: 16),
                       
@@ -245,7 +247,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _handleManualRefresh() async {
     if (_state.isSyncing) return;
     
-    _state.setIsSyncing(true);
+    // Reset loading states to show skeletons during refresh
+    _state.update((state) {
+      state.isSyncing = true;
+      state.isLoadingSummary = true;
+    }, immediate: true);
     
     try {
       AppLogger.info('🔄 Manual refresh triggered');
@@ -261,6 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       AppLogger.warning('⚠️ Manual refresh failed', error: e);
       _helpers.showSnackBar('⚠️ Sync failed. Please try again.');
+      _state.markSummaryLoaded(); // Stop skeleton on error
     } finally {
       _state.setIsSyncing(false);
     }

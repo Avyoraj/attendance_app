@@ -5,17 +5,68 @@ class TodayStatusCard extends StatelessWidget {
   final String status; // 'confirmed', 'provisional', 'none'
   final String? className;
   final String? checkInTime;
+  final bool isLoading;
 
   const TodayStatusCard({
     super.key,
     required this.status,
     this.className,
     this.checkInTime,
+    this.isLoading = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    
+    // Show skeleton while loading
+    if (isLoading) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 150,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 100,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     
     Color bgColor;
     Color textColor;
@@ -106,12 +157,14 @@ class WeeklyStatsCard extends StatelessWidget {
   final int confirmed;
   final int total;
   final int percentage;
+  final bool isLoading;
 
   const WeeklyStatsCard({
     super.key,
     required this.confirmed,
     required this.total,
     required this.percentage,
+    this.isLoading = false,
   });
 
   @override
@@ -148,35 +201,45 @@ class WeeklyStatsCard extends StatelessWidget {
                   color: colorScheme.onSurface,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _getPercentageColor(percentage).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '$percentage%',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: _getPercentageColor(percentage),
-                    fontWeight: FontWeight.bold,
+              if (isLoading)
+                Container(
+                  width: 50,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _getPercentageColor(percentage).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$percentage%',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: _getPercentageColor(percentage),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 16),
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
-              value: total > 0 ? confirmed / total : 0,
+              value: isLoading ? null : (total > 0 ? confirmed / total : 0),
               backgroundColor: isDark ? colorScheme.surfaceContainerLow : Colors.grey.shade200,
-              valueColor: AlwaysStoppedAnimation(_getPercentageColor(percentage)),
+              valueColor: AlwaysStoppedAnimation(isLoading ? Colors.grey : _getPercentageColor(percentage)),
               minHeight: 8,
             ),
           ),
           const SizedBox(height: 12),
           Text(
-            '$confirmed of $total classes attended',
+            isLoading ? 'Loading...' : '$confirmed of $total classes attended',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),

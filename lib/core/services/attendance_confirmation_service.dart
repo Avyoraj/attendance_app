@@ -200,11 +200,36 @@ class AttendanceConfirmationService {
         // TODO: Update local database status
         // await _updateLocalAttendanceStatus();
       } else {
-        // Backend rejected the confirmation (e.g., already confirmed, invalid state)
-        // This is NOT a network issue — don't retry
-        _logger.e('❌ Confirmation rejected by backend: ${response['error']}');
-        if (onConfirmationFailure != null) {
-          onConfirmationFailure!(studentId, classId);
+        // Backend rejected the confirmation
+        final errorCode = response['error'] as String?;
+        
+        if (errorCode == 'PROXY_DETECTED') {
+          // 🚨 PROXY DETECTED - Student flagged for suspicious pattern
+          final otherStudent = response['otherStudent'] ?? 'another student';
+          final correlationScore = response['correlationScore'];
+          _logger.e('🚫 PROXY DETECTED: $studentId flagged with $otherStudent (ρ=$correlationScore)');
+          _logger.e('📛 Attendance BLOCKED - student must see teacher');
+          
+          // Notify failure with special proxy flag
+          if (onConfirmationFailure != null) {
+            onConfirmationFailure!(studentId, classId);
+          }
+          
+          // The UI should show a special message for proxy detection
+          // This is handled by the callback in home_screen_sync.dart
+        } else if (errorCode == 'DEVICE_MISMATCH') {
+          // Device binding violation
+          _logger.e('🔒 DEVICE MISMATCH: $studentId tried from wrong device');
+          if (onConfirmationFailure != null) {
+            onConfirmationFailure!(studentId, classId);
+          }
+        } else {
+          // Other backend rejection (e.g., already confirmed, invalid state)
+          // This is NOT a network issue — don't retry
+          _logger.e('❌ Confirmation rejected by backend: $errorCode');
+          if (onConfirmationFailure != null) {
+            onConfirmationFailure!(studentId, classId);
+          }
         }
       }
     } catch (e) {
@@ -273,6 +298,7 @@ class AttendanceConfirmationService {
 
   /// Verify student is still in acceptable beacon range
   /// Returns: { inRange: bool, rssi: int, distance: double, reason: string }
+  /// 📱 Updated to be more lenient for locked screen scenarios
   Future<Map<String, dynamic>> _verifyStudentProximity() async {
     try {
       // Use RAW RSSI (no grace-period fallback) for strict end-of-window validation
@@ -292,14 +318,14 @@ class AttendanceConfirmationService {
         };
       }
 
-      // Failure: stale reading
-      if (ageSeconds != null && ageSeconds > 3) {
+      // Failure: stale reading - 📱 Increased from 3s to 10s for locked screen
+      if (ageSeconds != null && ageSeconds > 10) {
         return {
           'inRange': false,
           'rssi': rssi,
           'ageSeconds': ageSeconds,
           'inGrace': inGrace,
-          'reason': 'RSSI stale (age ${ageSeconds}s > 3s)'
+          'reason': 'RSSI stale (age ${ageSeconds}s > 10s)'
         };
       }
 
@@ -348,7 +374,8 @@ class AttendanceConfirmationService {
   /// Short gating window right at confirmation time.
   /// Samples RAW RSSI repeatedly for [windowSeconds] at [intervalMs] and
   /// requires either two consecutive valid samples or >=3 total passes.
-  Future<bool> _finalProximityGate({int windowSeconds = 2, int intervalMs = 300}) async {
+  /// 📱 Updated to be more lenient for locked screen scenarios
+  Future<bool> _finalProximityGate({int windowSeconds = 3, int intervalMs = 500}) async {
     _logger.i('🛂 Starting final proximity gate: ${windowSeconds}s');
     final int ticks = (windowSeconds * 1000 ~/ intervalMs).clamp(1, 50);
     int consecutivePass = 0;
@@ -368,8 +395,9 @@ class AttendanceConfirmationService {
 
       final check = await _verifyStudentProximity();
       final inRange = (check['inRange'] as bool?) ?? false;
-      final age = check['ageSeconds'] as int?; // prefer very fresh samples
-      final fresh = age != null ? age <= 1 : false;
+      final age = check['ageSeconds'] as int?;
+      // 📱 Relaxed freshness: allow up to 5 seconds (was 1s) for locked screen scenarios
+      final fresh = age != null ? age <= 5 : false;
 
       final pass = inRange && fresh && visible;
       if (pass) {
@@ -390,7 +418,7 @@ class AttendanceConfirmationService {
       await Future.delayed(Duration(milliseconds: intervalMs));
     }
 
-    final ok = totalPass >= 3;
+    final ok = totalPass >= 2; // 📱 Reduced from 3 to 2 for locked screen
     _logger.i('🛂 Gate ${ok ? 'PASS' : 'FAIL'} (totalPass=$totalPass/$ticks)');
     return ok;
   }

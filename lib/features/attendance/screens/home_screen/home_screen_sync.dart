@@ -276,7 +276,47 @@ class HomeScreenSync {
             classStartTime: DateTime.now(),
           );
         } else {
-          // Queue for offline processing if backend did not accept
+          // Check for specific error types
+          final errorCode = result['error'] as String?;
+          
+          if (errorCode == 'PROXY_DETECTED') {
+            // 🚨 PROXY DETECTED - Attendance blocked!
+            final otherStudent = result['otherStudent'] ?? 'another student';
+            state.logger.error('🚫 PROXY DETECTED: Blocked with $otherStudent');
+            
+            state.update((state) {
+              state.beaconStatusType = BeaconStatusType.failed;
+              state.beaconStatus = 
+                  '🚫 ATTENDANCE BLOCKED!\n\nSuspicious pattern detected with $otherStudent.\n\nPlease see your teacher.';
+              state.isAwaitingConfirmation = false;
+              state.remainingSeconds = 0;
+              state.isCheckingIn = false;
+            });
+            
+            // Show blocking notification
+            await NotificationService.showErrorNotification(
+              title: '🚫 Attendance Blocked',
+              message: 'Proxy pattern detected. Please see your teacher.',
+            );
+            
+            return; // Don't queue for retry - this is intentional blocking
+          } else if (errorCode == 'DEVICE_MISMATCH') {
+            // Device binding violation
+            state.logger.error('🔒 DEVICE MISMATCH: Wrong device');
+            
+            state.update((state) {
+              state.beaconStatusType = BeaconStatusType.failed;
+              state.beaconStatus = 
+                  '🔒 DEVICE MISMATCH!\n\nThis account is linked to another device.\n\nPlease use your registered device.';
+              state.isAwaitingConfirmation = false;
+              state.remainingSeconds = 0;
+              state.isCheckingIn = false;
+            });
+            
+            return; // Don't queue for retry
+          }
+          
+          // Other errors - queue for offline processing
           await LocalDatabaseService().savePendingAction(
             actionType: 'confirm',
             studentId: studentId,
@@ -366,6 +406,12 @@ class HomeScreenSync {
       
       final result = await state.httpService.getStudentSummary(
         studentId: studentId,
+      ).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          state.logger.warning('⏱️ Student summary fetch timeout');
+          return {'success': false, 'error': 'timeout'};
+        },
       );
 
       if (result['success'] == true) {
@@ -373,9 +419,11 @@ class HomeScreenSync {
         state.logger.info('✅ Student summary loaded successfully');
       } else {
         state.logger.warning('⚠️ Failed to fetch student summary: ${result['error']}');
+        state.markSummaryLoaded(); // Mark as loaded even on failure to stop skeleton
       }
     } catch (e) {
       state.logger.error('❌ Error fetching student summary', e);
+      state.markSummaryLoaded(); // Mark as loaded even on error to stop skeleton
     }
   }
 }

@@ -133,6 +133,7 @@ class HttpService {
 
   /// NEW: Confirm attendance (two-step)
   /// Includes deviceId and optional attendanceId for backend integrity checks
+  /// Handles PROXY_DETECTED error when student is flagged for suspicious patterns
   Future<Map<String, dynamic>> confirmAttendance({
     required String studentId,
     required String classId,
@@ -160,18 +161,49 @@ class HttpService {
           'success': true,
           'data': data,
         };
+      } else if (response.statusCode == 403) {
+        // Check for PROXY_DETECTED or DEVICE_MISMATCH
+        final error = jsonDecode(response.body);
+        final errorCode = error['error'] ?? 'FORBIDDEN';
+        
+        if (errorCode == 'PROXY_DETECTED') {
+          _logger.e('🚫 PROXY DETECTED: Attendance blocked for $studentId');
+          return {
+            'success': false,
+            'error': 'PROXY_DETECTED',
+            'message': error['message'] ?? 'Suspicious pattern detected. Please see your teacher.',
+            'otherStudent': error['otherStudent'],
+            'correlationScore': error['correlationScore'],
+            'anomalyId': error['anomalyId'],
+          };
+        } else if (errorCode == 'DEVICE_MISMATCH') {
+          _logger.e('🔒 DEVICE MISMATCH: $studentId tried from wrong device');
+          return {
+            'success': false,
+            'error': 'DEVICE_MISMATCH',
+            'message': error['message'] ?? 'This account is linked to another device',
+          };
+        }
+        
+        return {
+          'success': false,
+          'error': errorCode,
+          'message': error['message'] ?? 'Confirmation forbidden',
+        };
       } else {
         final error = jsonDecode(response.body);
         return {
           'success': false,
           'error': error['error'] ?? 'Confirmation failed',
+          'message': error['message'] ?? 'Unknown error',
         };
       }
     } catch (e) {
       _logger.e('Confirmation error: $e');
       return {
         'success': false,
-        'error': e.toString(),
+        'error': 'NETWORK_ERROR',
+        'message': e.toString(),
       };
     }
   }
