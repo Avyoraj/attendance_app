@@ -4,7 +4,8 @@ class ApiConstants {
   // Base URL now provided via --dart-define=API_URL, see Environment.apiUrl.
   // Examples:
   //  - flutter run --dart-define=API_URL=http://10.0.2.2:3000/api
-  //  - flutter build apk --dart-define=API_URL=https://prod.example.com/api
+  //  - flutter build apk --dart-define=API_URL=https://attendance-backend-omega.vercel.app/api
+  // Default to production URL if not specified
   static const String apiBase = Environment.apiUrl;
 
   // Core attendance endpoints
