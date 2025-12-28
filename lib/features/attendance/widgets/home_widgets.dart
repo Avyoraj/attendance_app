@@ -117,20 +117,23 @@ class WeeklyStatsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? colorScheme.surfaceContainerHighest : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
+        boxShadow: isDark ? null : [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
         ],
+        border: isDark ? Border.all(color: colorScheme.outline.withOpacity(0.2)) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,6 +145,7 @@ class WeeklyStatsCard extends StatelessWidget {
                 'This Week',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
+                  color: colorScheme.onSurface,
                 ),
               ),
               Container(
@@ -165,7 +169,7 @@ class WeeklyStatsCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               value: total > 0 ? confirmed / total : 0,
-              backgroundColor: Colors.grey.shade200,
+              backgroundColor: isDark ? colorScheme.surfaceContainerLow : Colors.grey.shade200,
               valueColor: AlwaysStoppedAnimation(_getPercentageColor(percentage)),
               minHeight: 8,
             ),
@@ -174,7 +178,7 @@ class WeeklyStatsCard extends StatelessWidget {
           Text(
             '$confirmed of $total classes attended',
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: Colors.grey.shade600,
+              color: colorScheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -207,24 +211,26 @@ class ActiveSessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     if (!isActive || className == null) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.grey.shade100,
+          color: isDark ? colorScheme.surfaceContainerHighest : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(color: isDark ? colorScheme.outline.withOpacity(0.2) : Colors.grey.shade300),
         ),
         child: Row(
           children: [
-            Icon(Icons.event_busy, color: Colors.grey.shade400, size: 24),
+            Icon(Icons.event_busy, color: colorScheme.onSurfaceVariant, size: 24),
             const SizedBox(width: 12),
             Text(
               'No active class session',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: Colors.grey.shade600,
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -312,30 +318,33 @@ class RecentHistoryList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     if (history.isEmpty) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? colorScheme.surfaceContainerHighest : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
+          boxShadow: isDark ? null : [
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
           ],
+          border: isDark ? Border.all(color: colorScheme.outline.withOpacity(0.2)) : null,
         ),
         child: Column(
           children: [
-            Icon(Icons.history, color: Colors.grey.shade400, size: 40),
+            Icon(Icons.history, color: colorScheme.onSurfaceVariant, size: 40),
             const SizedBox(height: 8),
             Text(
               'No recent attendance',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: Colors.grey.shade600,
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -346,15 +355,16 @@ class RecentHistoryList extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? colorScheme.surfaceContainerHighest : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
+        boxShadow: isDark ? null : [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
         ],
+        border: isDark ? Border.all(color: colorScheme.outline.withOpacity(0.2)) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,10 +375,11 @@ class RecentHistoryList extends StatelessWidget {
               'Recent History',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
+                color: colorScheme.onSurface,
               ),
             ),
           ),
-          const Divider(height: 1),
+          Divider(height: 1, color: colorScheme.outline.withOpacity(0.2)),
           ...history.take(5).map((record) => _buildHistoryItem(context, record)),
         ],
       ),
@@ -377,6 +388,7 @@ class RecentHistoryList extends StatelessWidget {
 
   Widget _buildHistoryItem(BuildContext context, Map<String, dynamic> record) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final status = record['status'] ?? 'unknown';
     final date = record['session_date'] ?? record['sessionDate'] ?? '';
     final classId = record['class_id'] ?? record['classId'] ?? '';
@@ -416,12 +428,13 @@ class RecentHistoryList extends StatelessWidget {
                   classId,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w500,
+                    color: colorScheme.onSurface,
                   ),
                 ),
                 Text(
                   date,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.grey.shade600,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],

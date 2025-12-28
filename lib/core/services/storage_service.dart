@@ -64,4 +64,22 @@ class StorageService {
       return false;
     }
   }
+
+  // Generic bool storage methods
+  Future<bool> setBool(String key, bool value) async {
+    return await _preferences?.setBool(key, value) ?? false;
+  }
+
+  Future<bool?> getBool(String key) async {
+    return _preferences?.getBool(key);
+  }
+
+  // Generic string storage methods
+  Future<bool> setString(String key, String value) async {
+    return await _preferences?.setString(key, value) ?? false;
+  }
+
+  Future<String?> getString(String key) async {
+    return _preferences?.getString(key);
+  }
 }

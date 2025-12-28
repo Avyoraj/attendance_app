@@ -51,7 +51,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     });
 
     try {
-      final response = await HttpService().post(
+      final response = await HttpService().put(
         url: '${ApiConstants.apiBase}/students/${widget.studentId}/profile',
         body: {
           'name': _nameController.text.trim(),

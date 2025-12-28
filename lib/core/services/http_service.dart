@@ -56,6 +56,26 @@ class HttpService {
     }
   }
 
+  Future<http.Response> put({
+    required String url,
+    required Map<String, dynamic> body,
+    Map<String, String>? headers,
+  }) async {
+    final mergedHeaders = {..._defaultHeaders, ...?headers};
+    try {
+      return await http
+          .put(
+            Uri.parse(url),
+            headers: mergedHeaders,
+            body: jsonEncode(body),
+          )
+          .timeout(_requestTimeout);
+    } on TimeoutException catch (e) {
+      _logger.w('HTTP PUT timeout for $url: $e');
+      rethrow;
+    }
+  }
+
   /// NEW: Check-in with device ID and RSSI
   Future<Map<String, dynamic>> checkIn({
     required String studentId,
