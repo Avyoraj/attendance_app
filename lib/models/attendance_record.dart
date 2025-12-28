@@ -27,26 +27,27 @@ class AttendanceRecord {
   }
 
   factory AttendanceRecord.fromBackendJson(Map<String, dynamic> json) {
-    final checkInTime = json['checkInTime'] ?? json['timestamp'];
+    // Handle both snake_case (Supabase) and camelCase field names
+    final checkInTime = json['check_in_time'] ?? json['checkInTime'] ?? json['timestamp'];
     final metadata = <String, dynamic>{
-      'confirmedAt': json['confirmedAt'],
-      'cancelledAt': json['cancelledAt'],
-      'cancellationReason': json['cancellationReason'],
+      'confirmedAt': json['confirmed_at'] ?? json['confirmedAt'],
+      'cancelledAt': json['cancelled_at'] ?? json['cancelledAt'],
+      'cancellationReason': json['cancellation_reason'] ?? json['cancellationReason'],
       'rssi': json['rssi'],
       'distance': json['distance'],
-      'beaconMajor': json['beaconMajor'],
-      'beaconMinor': json['beaconMinor'],
-      'remainingSeconds': json['remainingSeconds'],
-      'confirmationExpiresAt': json['confirmationExpiresAt'],
+      'beaconMajor': json['beacon_major'] ?? json['beaconMajor'],
+      'beaconMinor': json['beacon_minor'] ?? json['beaconMinor'],
+      'remainingSeconds': json['remaining_seconds'] ?? json['remainingSeconds'],
+      'confirmationExpiresAt': json['confirmation_expires_at'] ?? json['confirmationExpiresAt'],
       'cooldown': json['cooldown'],
-      'deviceId': json['deviceId'],
-      'sessionDate': json['sessionDate'],
+      'deviceId': json['device_id'] ?? json['deviceId'],
+      'sessionDate': json['session_date'] ?? json['sessionDate'],
     }..removeWhere((key, value) => value == null);
 
     return AttendanceRecord(
       id: json['attendanceId'] ?? json['_id'] ?? json['id'] ?? '',
-      studentId: json['studentId'] ?? '',
-      classId: json['classId'] ?? '',
+      studentId: json['student_id'] ?? json['studentId'] ?? '',
+      classId: json['class_id'] ?? json['classId'] ?? '',
       timestamp: _parseTimestamp(checkInTime),
       status: json['status'] ?? 'unknown',
       metadata: metadata.isEmpty ? null : metadata,

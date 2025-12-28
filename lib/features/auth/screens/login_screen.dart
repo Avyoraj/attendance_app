@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import '../services/auth_service.dart';
 import '../widgets/login_form.dart';
 import '../../../app/main_navigation.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/api_constants.dart';
 import '../../../core/services/logger_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/beacon_service.dart';
+import '../../../core/services/http_service.dart';
+import '../../profile/screens/profile_setup_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -39,15 +43,38 @@ class _LoginScreenState extends State<LoginScreen> {
         await _syncAttendanceState(studentId);
         if (!mounted) return;
 
-        // Then start background service and navigate
+        // Then start background service
         await _startBackgroundService();
         if (!mounted) return;
 
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => MainNavigation(studentId: studentId),
-          ),
-        );
+        // Check if profile is complete
+        final isProfileComplete = await _checkProfileComplete(studentId);
+        if (!mounted) return;
+
+        if (isProfileComplete) {
+          // Profile complete - go to main app
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => MainNavigation(studentId: studentId),
+            ),
+          );
+        } else {
+          // Profile incomplete - show setup screen
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => ProfileSetupScreen(
+                studentId: studentId,
+                onComplete: () {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (context) => MainNavigation(studentId: studentId),
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
+        }
       } else {
         // Login failed - show specific error message
         final errorMessage = loginResult['message'] ?? 'Login failed';
@@ -97,6 +124,26 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       ),
     );
+  }
+
+  /// Check if student profile is complete
+  Future<bool> _checkProfileComplete(String studentId) async {
+    try {
+      final response = await HttpService().get(
+        url: '${ApiConstants.apiBase}/students/$studentId/profile',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['isProfileComplete'] == true;
+      }
+      // If error, assume profile is complete to not block login
+      return true;
+    } catch (e) {
+      _logger.error('Error checking profile completion', e);
+      // On error, assume complete to not block login
+      return true;
+    }
   }
 
   /// 🎯 NEW: Sync attendance state from backend after login

@@ -16,9 +16,10 @@ class SessionService {
   final _httpService = HttpService();
 
   // Cache for active session to reduce API calls
+  // Increased to 60s for scalability (50+ students)
   Map<String, dynamic>? _cachedSession;
   DateTime? _cacheTime;
-  static const Duration _cacheDuration = Duration(seconds: 30);
+  static const Duration _cacheDuration = Duration(seconds: 60);
 
   /// Check if there's an active session for the detected beacon
   /// Returns session info if active, null otherwise

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import '../../../core/services/profile_service.dart';
+import '../../../core/services/storage_service.dart';
+import '../../../core/services/http_service.dart';
+import '../../../core/constants/api_constants.dart';
 import '../../../models/user_profile.dart';
 import '../widgets/profile_stats_card.dart';
 
@@ -17,6 +21,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   UserProfile? _profile;
   bool _isLoading = true;
   String? _error;
+  bool _isProfileLocked = false;
 
   @override
   void initState() {
@@ -31,15 +36,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _error = null;
       });
 
-      // Replace with actual studentId from auth context if available
-      const studentId = '123456';
-      final profile = await ProfileService().getUserProfile(studentId);
+      // Get actual studentId from storage
+      final storage = await StorageService.getInstance();
+      final studentId = await storage.getStudentId();
+      
+      if (studentId == null || studentId.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _error = 'No student is currently logged in.';
+          _isLoading = false;
+        });
+        return;
+      }
 
-      setState(() {
-        _profile = profile;
-        _isLoading = false;
-      });
+      // Fetch profile and check if locked
+      final response = await HttpService().get(
+        url: '${ApiConstants.apiBase}/students/$studentId/profile',
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final profile = await ProfileService().getUserProfile(studentId);
+        
+        if (!mounted) return;
+        setState(() {
+          _profile = profile;
+          _isProfileLocked = data['isProfileComplete'] == true;
+          _isLoading = false;
+        });
+      } else {
+        final profile = await ProfileService().getUserProfile(studentId);
+        if (!mounted) return;
+        setState(() {
+          _profile = profile;
+          _isProfileLocked = false;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -206,14 +241,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
 
           // Stats Card
-          const SliverToBoxAdapter(
+          SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: ProfileStatsCard(
-                totalDays: 180,
-                presentDays: 160,
-                absentDays: 20,
-                streak: 12,
+                totalDays: _profile!.totalClasses,
+                presentDays: _profile!.confirmedClasses,
+                absentDays: _profile!.totalClasses - _profile!.confirmedClasses,
+                streak: _profile!.attendancePercentage,
               ),
             ),
           ),
@@ -313,25 +348,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildActionButtons(ColorScheme colorScheme) {
     return Column(
       children: [
-        // Edit Profile Button
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: () {
-              // TODO: Navigate to edit profile screen
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Edit profile feature coming soon!')),
-              );
-            },
-            icon: const Icon(Icons.edit),
-            label: const Text('Edit Profile'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(double.infinity, 48),
+        // Profile locked indicator
+        if (_isProfileLocked)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: colorScheme.outline.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.lock, size: 20, color: colorScheme.onSurfaceVariant),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Profile is locked. Contact your teacher to make changes.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-        const SizedBox(height: 12),
 
         // Settings Button
         SizedBox(
@@ -387,6 +429,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Icons.business),
             _buildInfoRow(
                 'Year', _profile!.year ?? 'Not provided', Icons.calendar_today),
+            _buildInfoRow(
+                'Section', _profile!.section ?? 'Not provided', Icons.group),
           ],
         ),
       ),

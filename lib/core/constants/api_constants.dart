@@ -23,8 +23,9 @@ class ApiConstants {
   static const String analyzeCorrelations = '$apiBase/rssi/analyze';
 
   // Session endpoints (for Session Activator integration)
+  // Demo mode auto-creates sessions if none exist (for project demo)
   static String activeSessionByBeacon(int major, int minor) =>
-      '$apiBase/sessions/active/beacon/$major/$minor';
+      '$apiBase/sessions/active/beacon/$major/$minor?demo=true';
 
   // Student summary endpoints (for HomeScreen)
   static String studentSummary(String studentId) =>

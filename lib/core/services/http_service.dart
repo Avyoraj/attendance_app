@@ -281,6 +281,7 @@ class HttpService {
 
   /// Get active session by beacon (for Session Activator integration)
   /// Returns the active class session for a given beacon
+  /// Demo mode auto-creates sessions if none exist
   Future<Map<String, dynamic>> getActiveSessionByBeacon({
     required int major,
     required int minor,
@@ -294,9 +295,18 @@ class HttpService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        final isDemoMode = data['demoMode'] == true;
+        final wasAutoCreated = data['autoCreated'] == true;
+        
+        if (isDemoMode) {
+          _logger.i('🎯 DEMO MODE: Session auto-created');
+        }
+        
         return {
           'success': true,
           'hasActiveSession': data['hasActiveSession'] ?? false,
+          'demoMode': isDemoMode,
+          'autoCreated': wasAutoCreated,
           'session': data['session'],
           'classId': data['session']?['class_id'] ?? data['session']?['classId'],
           'className': data['session']?['class_name'] ?? data['session']?['className'],
