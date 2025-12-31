@@ -1,24 +1,26 @@
-/// Backend smoke validation script
-///
-/// Usage:
-///   dart run --define=API_URL=http://localhost:3000/api bin/backend_smoke.dart --studentId S123 --classId CS101
-///
-/// This script performs:
-/// 1. Provisional check-in (POST /api/check-in)
-/// 2. Confirmation (POST /api/attendance/confirm) if provisional
-/// 3. Fetch today's attendance (GET /api/attendance/today/:studentId)
-///
-/// Exit codes:
-/// 0 = success end-to-end
-/// 1 = check-in failed
-/// 2 = confirmation failed
-/// 3 = today attendance fetch failed
-///
+// Backend smoke validation script
+//
+// Usage:
+//   dart run --define=API_URL=http://localhost:3000/api bin/backend_smoke.dart --studentId S123 --classId CS101
+//
+// This script performs:
+// 1. Provisional check-in (POST /api/check-in)
+// 2. Confirmation (POST /api/attendance/confirm) if provisional
+// 3. Fetch today's attendance (GET /api/attendance/today/:studentId)
+//
+// Exit codes:
+// 0 = success end-to-end
+// 1 = check-in failed
+// 2 = confirmation failed
+// 3 = today attendance fetch failed
+//
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart';
 
 const apiUrl = String.fromEnvironment('API_URL', defaultValue: 'http://localhost:3000/api');
+const deviceSecret = String.fromEnvironment('DEVICE_SECRET', defaultValue: 'dev-device-secret');
 
 Future<void> main(List<String> args) async {
   final argMap = _parseArgs(args);
@@ -30,12 +32,20 @@ Future<void> main(List<String> args) async {
   _log('API base: $apiUrl');
   _log('Student: $studentId  Class: $classId  Device: $deviceId  RSSI: $rssi');
 
+  // Generate signature
+  final hmac = Hmac(sha256, utf8.encode(deviceSecret));
+  final signature = hmac.convert(utf8.encode(deviceId)).toString();
+  final eventId = 'evt_${DateTime.now().millisecondsSinceEpoch}';
+
   // 1. Check-in
   final checkInResult = await _post('$apiUrl/check-in', {
     'studentId': studentId,
     'classId': classId,
     'deviceId': deviceId,
     'rssi': rssi,
+    'eventId': eventId,
+    'deviceSignature': signature,
+    'deviceSaltVersion': 'v1',
   });
 
   if (checkInResult == null) {
@@ -59,9 +69,14 @@ Future<void> main(List<String> args) async {
   } else if (status == 'provisional') {
     // 2. Confirm
     _log('Attempting confirmation...');
+    final confirmEventId = 'evt_conf_${DateTime.now().millisecondsSinceEpoch}';
     final confirmResult = await _post('$apiUrl/attendance/confirm', {
       'studentId': studentId,
       'classId': classId,
+      'deviceId': deviceId,
+      'eventId': confirmEventId,
+      'deviceSignature': signature,
+      'deviceSaltVersion': 'v1',
     });
 
     if (confirmResult == null || confirmResult['success'] != true) {

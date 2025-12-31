@@ -16,20 +16,27 @@ class CalmStatusBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final isBlocked = state.beaconStatusType == BeaconStatusType.failed ||
+        state.beaconStatusType == BeaconStatusType.deviceLocked;
+    final isCancelled = state.beaconStatusType == BeaconStatusType.cancelled;
+
+    final backgroundColor = isCancelled ? colors.errorContainer : colors.surfaceContainerHighest;
+    final contentColor = isCancelled ? colors.onErrorContainer : colors.onSurface;
+    final iconColor = isCancelled ? colors.onErrorContainer : colors.onSurfaceVariant;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.outlineVariant),
+        border: Border.all(color: isCancelled ? colors.error : colors.outlineVariant),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(_iconFor(state.beaconStatusType),
-              color: colors.onSurfaceVariant),
+              color: iconColor),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -39,8 +46,9 @@ class CalmStatusBanner extends StatelessWidget {
                 Text(
                   state.beaconStatus,
                   style: theme.textTheme.bodyLarge?.copyWith(
-                    color: colors.onSurface,
+                    color: contentColor,
                     height: 1.3,
+                    fontWeight: isCancelled ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
                 if (state.isAwaitingConfirmation && state.remainingSeconds > 0)
@@ -50,6 +58,41 @@ class CalmStatusBanner extends StatelessWidget {
                       'Confirmation in progress',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                if (isBlocked)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.shield, size: 14, color: colors.error),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Blocked — please see admin',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.error,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (isCancelled && (state.beaconStatus.contains('Proxy') || state.beaconStatus.contains('Flagged')))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6.0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: colors.error,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'FLAGGED',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colors.onError,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),

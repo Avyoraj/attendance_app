@@ -66,7 +66,8 @@ class SyncService {
     }
 
     _isSyncing = true;
-    int syncedCount = 0;
+  int syncedCount = 0;
+  int actionsProcessed = 0;
 
     try {
   final pendingRecords = await _localDb.getUnsyncedRecords();
@@ -132,6 +133,8 @@ class SyncService {
           break;
         }
 
+        actionsProcessed++;
+
         await Future.delayed(const Duration(milliseconds: 300));
       }
 
@@ -141,6 +144,11 @@ class SyncService {
 
         // Cleanup old synced records
         await _localDb.cleanupOldRecords();
+      }
+
+      if (actionsProcessed > 0) {
+        _logger.info('✅ Processed $actionsProcessed pending actions');
+        await _alertService.showPendingActionsSyncedNotification(actionsProcessed);
       }
     } catch (e, stackTrace) {
       _logger.error('Error during sync process', e, stackTrace);

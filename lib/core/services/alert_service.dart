@@ -1,6 +1,9 @@
+// ignore_for_file: prefer_const_constructors
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'
+    as fln;
 import 'logger_service.dart';
 import 'permission_service.dart';
 
@@ -13,7 +16,7 @@ class AlertService {
 
   final LoggerService _logger = LoggerService();
   final AudioPlayer _audioPlayer = AudioPlayer();
-  FlutterLocalNotificationsPlugin? _notifications;
+  fln.FlutterLocalNotificationsPlugin? _notifications;
 
   bool _bluetoothAlertShown = false;
   bool _internetAlertShown = false;
@@ -24,11 +27,11 @@ class AlertService {
   static const Duration _alertCooldown = Duration(minutes: 5);
 
   Future<void> initialize() async {
-    _notifications = FlutterLocalNotificationsPlugin();
+    _notifications = fln.FlutterLocalNotificationsPlugin();
 
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidSettings);
+    final androidSettings =
+        fln.AndroidInitializationSettings('@mipmap/ic_launcher');
+    final initSettings = fln.InitializationSettings(android: androidSettings);
 
     await _notifications!.initialize(initSettings);
 
@@ -40,22 +43,22 @@ class AlertService {
 
   Future<void> _createNotificationChannels() async {
     // Critical alerts channel (with sound and vibration)
-    const criticalChannel = AndroidNotificationChannel(
+    const criticalChannel = fln.AndroidNotificationChannel(
       'critical_alerts',
       'Critical Alerts',
       description: 'Important alerts and attendance notifications',
-      importance: Importance.high,
+      importance: fln.Importance.high,
       playSound: true,
       enableVibration: true,
       showBadge: true,
     );
 
     // Attendance success channel (separate channel for attendance notifications)
-    const attendanceChannel = AndroidNotificationChannel(
+    const attendanceChannel = fln.AndroidNotificationChannel(
       'attendance_success',
       'Attendance Success',
       description: 'Attendance logged notifications',
-      importance: Importance.max, // MAX for highest visibility
+      importance: fln.Importance.max, // MAX for highest visibility
       playSound: true,
       enableVibration: true,
       showBadge: true,
@@ -64,12 +67,12 @@ class AlertService {
 
     await _notifications!
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+            fln.AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(criticalChannel);
 
     await _notifications!
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+            fln.AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(attendanceChannel);
   }
 
@@ -109,7 +112,7 @@ class AlertService {
       id: 100,
       title: '⚠️ Bluetooth Disabled',
       body: 'Please enable Bluetooth to log attendance automatically.',
-      priority: Priority.high,
+      priority: fln.Priority.high,
     );
 
     _logger.warning('Bluetooth disabled alert shown');
@@ -137,7 +140,7 @@ class AlertService {
       id: 101,
       title: '📵 No Internet Connection',
       body: 'Attendance will be saved locally and synced when online.',
-      priority: Priority.high,
+      priority: fln.Priority.high,
     );
 
     _logger.warning('Internet unavailable alert shown');
@@ -173,26 +176,26 @@ class AlertService {
 
     _logger.debug('✓ Notification permission granted');
 
-    final androidDetails = AndroidNotificationDetails(
+    final androidDetails = fln.AndroidNotificationDetails(
       'attendance_success', // Dedicated attendance channel
       'Attendance Success',
       channelDescription: 'Attendance logged notifications',
-      importance: Importance.max, // MAX importance
-      priority: Priority.max, // MAX priority
+      importance: fln.Importance.max, // MAX importance
+      priority: fln.Priority.max, // MAX priority
       playSound: true,
       enableVibration: true,
-      visibility: NotificationVisibility.public,
+      visibility: fln.NotificationVisibility.public,
       showWhen: true,
       enableLights: true,
       ledColor: const Color(0xFF00FF00), // Green LED
       ledOnMs: 1000,
       ledOffMs: 500,
-      category: AndroidNotificationCategory
+      category: fln.AndroidNotificationCategory
           .message, // Changed to MESSAGE for better visibility
       ticker: 'Attendance Recorded for $classId', // Shows in status bar
     );
 
-    final details = NotificationDetails(android: androidDetails);
+    final details = fln.NotificationDetails(android: androidDetails);
 
     try {
       await _notifications?.show(
@@ -213,7 +216,20 @@ class AlertService {
       id: 201,
       title: '🔄 Attendance Synced',
       body: '$count attendance record${count > 1 ? 's' : ''} synced to server.',
-      priority: Priority.low,
+      importance: fln.Importance.defaultImportance,
+      priority: fln.Priority.defaultPriority,
+    );
+  }
+
+  /// Show pending actions (confirm/cancel) synced notification
+  Future<void> showPendingActionsSyncedNotification(int count) async {
+    await _showNotification(
+      id: 202,
+      title: '📤 Offline actions synced',
+      body:
+          '$count pending action${count > 1 ? 's' : ''} processed successfully.',
+      importance: fln.Importance.defaultImportance,
+      priority: fln.Priority.defaultPriority,
     );
   }
 
@@ -223,7 +239,8 @@ class AlertService {
       id: 300,
       title: '🔍 Auto-Attendance Active',
       body: 'Scanning for classroom beacons in background.',
-      priority: Priority.low,
+      importance: fln.Importance.low,
+      priority: fln.Priority.low,
       ongoing: true,
     );
   }
@@ -249,7 +266,8 @@ class AlertService {
     required int id,
     required String title,
     required String body,
-    Priority priority = Priority.defaultPriority,
+    fln.Importance importance = fln.Importance.defaultImportance,
+    fln.Priority priority = fln.Priority.defaultPriority,
     bool ongoing = false,
   }) async {
     _logger.debug('Showing notification: id=$id, title=$title');
@@ -264,22 +282,21 @@ class AlertService {
 
     _logger.debug('✓ Notification permission granted');
 
-    final androidDetails = AndroidNotificationDetails(
+    final androidDetails = fln.AndroidNotificationDetails(
       'critical_alerts',
       'Critical Alerts',
       channelDescription: 'Important alerts',
-      importance: priority == Priority.high ? Importance.high : Importance.low,
+      importance: importance,
       priority: priority,
-      playSound: priority == Priority.high,
-      enableVibration: priority == Priority.high,
+      enableVibration: priority == fln.Priority.high,
       ongoing: ongoing,
       autoCancel: !ongoing,
-      visibility: NotificationVisibility.public, // Show on lock screen
+      visibility: fln.NotificationVisibility.public, // Show on lock screen
       showWhen: true,
-      category: AndroidNotificationCategory.status,
+      category: fln.AndroidNotificationCategory.status,
     );
 
-    final details = NotificationDetails(android: androidDetails);
+    final details = fln.NotificationDetails(android: androidDetails);
 
     try {
       await _notifications?.show(id, title, body, details);

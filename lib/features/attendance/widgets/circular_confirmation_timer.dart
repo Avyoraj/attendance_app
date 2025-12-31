@@ -112,7 +112,7 @@ class _CircularConfirmationTimerState extends State<CircularConfirmationTimer>
     // Format time display
     final minutes = widget.remainingSeconds ~/ 60;
     final seconds = widget.remainingSeconds % 60;
-    final timeDisplay = '${minutes}:${seconds.toString().padLeft(2, '0')}';
+  final timeDisplay = '$minutes:${seconds.toString().padLeft(2, '0')}';
 
     // Determine status text
     String statusText;
@@ -309,7 +309,7 @@ class CompactConfirmationTimer extends StatelessWidget {
     // Format time
     final minutes = remainingSeconds ~/ 60;
     final seconds = remainingSeconds % 60;
-    final timeDisplay = '${minutes}:${seconds.toString().padLeft(2, '0')}';
+  final timeDisplay = '$minutes:${seconds.toString().padLeft(2, '0')}';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

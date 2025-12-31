@@ -155,11 +155,7 @@ class _HomeScreenState extends State<HomeScreen> {
             appBar: AppBar(
               title: Text('Welcome, ${widget.studentId}'),
               actions: [
-                IconButton(
-                  icon: const Icon(Icons.sync),
-                  onPressed: state.isSyncing ? null : _handleManualRefresh,
-                  tooltip: 'Sync with server',
-                ),
+                _buildSyncButton(state),
                 IconButton(
                   icon: const Icon(Icons.logout),
                   onPressed: () => _helpers.handleLogout(),
@@ -271,5 +267,39 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       _state.setIsSyncing(false);
     }
+  }
+  
+  /// Sync button with pending offline badge
+  Widget _buildSyncButton(HomeScreenState state) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.sync),
+          onPressed: state.isSyncing ? null : _handleManualRefresh,
+          tooltip: 'Sync with server',
+        ),
+        if (state.pendingActionCount > 0)
+          Positioned(
+            right: 10,
+            top: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade700,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                state.pendingActionCount.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }

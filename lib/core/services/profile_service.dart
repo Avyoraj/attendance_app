@@ -21,9 +21,8 @@ class ProfileService {
 
       String name = 'Student $studentId';
       String? email;
-      String? department;
-      String? year;
-      String? section;
+  String? department;
+  String? year;
 
       if (profileResponse.statusCode == 200) {
         final profileData = jsonDecode(profileResponse.body) as Map<String, dynamic>;
@@ -31,7 +30,6 @@ class ProfileService {
         email = profileData['email'];
         department = profileData['department'];
         year = profileData['year']?.toString();
-        section = profileData['section'];
       }
 
       // Fetch student summary for attendance stats

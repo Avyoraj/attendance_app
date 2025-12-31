@@ -1,4 +1,11 @@
 class AppConstants {
+  // ------------------------------------------------------------------
+  // ⚙️ CONFIGURATION SWITCH
+  // ------------------------------------------------------------------
+  // Set to TRUE for Demo (3 mins), FALSE for Production (30 mins)
+  static const bool isDemoMode = true;
+  // ------------------------------------------------------------------
+
   // Storage Keys
   static const String studentIdKey = 'student_id';
   static const String deviceIdKey =
@@ -31,9 +38,10 @@ class AppConstants {
       Duration(seconds: 3); // Shorter validation
 
   // NEW: Two-Step Attendance Configuration
-  static const Duration secondCheckDelay = Duration(
-      minutes:
-          3); // TESTING: 3 minutes (long enough for grace period to be negligible)
+  static const Duration secondCheckDelay = isDemoMode 
+      ? Duration(minutes: 3)   // Demo: 3 minutes
+      : Duration(minutes: 30); // Prod: 30 minutes
+
   static const Duration confirmationTimeout =
       Duration(minutes: 20); // Max time for confirmation
 

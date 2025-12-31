@@ -100,6 +100,8 @@ class HomeScreenSync {
           state.beaconStatus = '📡 Scanning for classroom beacon...';
         });
       }
+      // Surface offline pending actions to the user
+      await _refreshPendingActionsBadge(showSnackBar: showSnackBar);
     } catch (e) {
       state.logger.error('❌ State sync error on startup', e);
       state.update((state) {
@@ -165,7 +167,9 @@ class HomeScreenSync {
   ) async {
     final classId = record['classId'] as String;
     final cancelledTime = DateTime.parse(record['checkInTime']);
-    state.logger.info('❌ Found cancelled attendance for Class $classId');
+    final reason = record['cancellation_reason'] ?? record['cancellationReason'];
+    
+    state.logger.info('❌ Found cancelled attendance for Class $classId. Reason: $reason');
 
     final cancelledInfo = ScheduleUtils.getScheduleAwareCancelledInfo(
       cancelledTime: cancelledTime,
@@ -176,7 +180,7 @@ class HomeScreenSync {
       state.beaconStatusType = BeaconStatusType.cancelled;
       state.currentClassId = classId;
       state.beaconStatus =
-          '❌ Attendance Cancelled for Class $classId\n${cancelledInfo['message']}';
+          '❌ Attendance Cancelled for Class $classId\n${reason != null ? "Reason: $reason" : cancelledInfo['message']}';
       state.cooldownInfo = cancelledInfo;
       state.isAwaitingConfirmation = false;
       state.remainingSeconds = 0;
@@ -424,6 +428,27 @@ class HomeScreenSync {
     } catch (e) {
       state.logger.error('❌ Error fetching student summary', e);
       state.markSummaryLoaded(); // Mark as loaded even on error to stop skeleton
+    }
+  }
+
+  /// Refresh pending action count and notify user if any are queued
+  Future<void> _refreshPendingActionsBadge({
+    required void Function(String message) showSnackBar,
+  }) async {
+    try {
+      final previousCount = state.pendingActionCount;
+      final pending = await LocalDatabaseService().getPendingActions();
+      state.updatePendingActionsCount(pending.length);
+
+      if (pending.isNotEmpty) {
+        showSnackBar(
+            '📤 ${pending.length} offline actions queued. Will auto-sync when online.');
+      } else if (previousCount > 0) {
+        // Transitioned from having pending actions to none
+        showSnackBar('✅ Offline actions replayed successfully.');
+      }
+    } catch (e) {
+      state.logger.warning('⚠️ Unable to refresh pending actions badge', e);
     }
   }
 }

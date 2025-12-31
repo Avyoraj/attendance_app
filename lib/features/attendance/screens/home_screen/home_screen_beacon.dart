@@ -135,6 +135,7 @@ class HomeScreenBeacon {
 
   /// Update notification with beacon status (debounced)
   void _updateNotificationIfNeeded(String classId, int rssi, double distance) {
+    if (state.isDisposed) return;
     final now = DateTime.now();
     if (state.lastNotificationUpdate == null ||
         now.difference(state.lastNotificationUpdate!).inMilliseconds >= 1000) {
@@ -155,6 +156,7 @@ class HomeScreenBeacon {
 
   /// Update notification for no beacon state (debounced)
   void _updateNoBeaconNotification() {
+    if (state.isDisposed) return;
     final now = DateTime.now();
     if (state.lastNotificationUpdate == null ||
         now.difference(state.lastNotificationUpdate!).inMilliseconds >= 2000) {

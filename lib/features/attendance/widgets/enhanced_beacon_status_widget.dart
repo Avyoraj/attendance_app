@@ -375,6 +375,8 @@ class _Material3BeaconStatusWidgetState
         return colorScheme.outline;
       case BeaconStatusType.info:
         return colorScheme.primary;
+      case BeaconStatusType.noSession:
+        return colorScheme.outlineVariant;
     }
   }
 
@@ -399,6 +401,8 @@ class _Material3BeaconStatusWidgetState
         return Icons.lock_outline;
       case BeaconStatusType.info:
         return Icons.bluetooth_searching;
+      case BeaconStatusType.noSession:
+        return Icons.info_outline;
     }
   }
 
@@ -424,6 +428,8 @@ class _Material3BeaconStatusWidgetState
         return 'Device Locked';
       case BeaconStatusType.info:
         return 'Attendance Status';
+      case BeaconStatusType.noSession:
+        return 'No Active Session';
     }
   }
 
@@ -449,6 +455,8 @@ class _Material3BeaconStatusWidgetState
         return 'If this is unexpected, contact your administrator to relink your device.';
       case BeaconStatusType.info:
         return null;
+      case BeaconStatusType.noSession:
+        return 'No class session is active right now. We will start scanning when a session begins.';
     }
   }
 
@@ -472,6 +480,8 @@ class _Material3BeaconStatusWidgetState
         return 'Keep Bluetooth enabled and hold your device near the classroom entry. We will start the check-in once the beacon is detected.';
       case BeaconStatusType.info:
         return 'Keep your phone with you and ensure Bluetooth stays on for uninterrupted attendance tracking.';
+      case BeaconStatusType.noSession:
+        return 'No active class session right now. Once a session starts, we will begin scanning automatically.';
     }
   }
 

@@ -93,6 +93,9 @@ class HomeScreenState extends ChangeNotifier {
   // Manual sync state
   bool isSyncing = false;
 
+  // Pending offline actions (confirm/cancel) awaiting replay
+  int pendingActionCount = 0;
+
   // Student summary data (for enhanced HomeScreen)
   Map<String, dynamic>? studentSummary;
   List<Map<String, dynamic>> recentHistory = [];
@@ -129,8 +132,9 @@ class HomeScreenState extends ChangeNotifier {
         if (attendance.isNotEmpty) {
           final latest = attendance.first as Map<String, dynamic>;
           state.todayStatus = latest['status'] ?? 'none';
-          state.todayClassName = latest['class_id'] ?? latest['classId'];
-          state.todayCheckInTime = _formatTime(latest['check_in_time'] ?? latest['checkInTime']);
+          state.todayClassName = latest['class_id'] ?? latest['classId'] ?? latest['class'] ?? latest['className'];
+          final rawCheckIn = latest['check_in_time'] ?? latest['checkInTime'];
+          state.todayCheckInTime = _formatTime(rawCheckIn);
         } else {
           state.todayStatus = 'none';
           state.todayClassName = null;
@@ -141,9 +145,9 @@ class HomeScreenState extends ChangeNotifier {
       // Parse weekly stats
       final weekStats = summary['weekStats'] as Map<String, dynamic>?;
       if (weekStats != null) {
-        state.weeklyConfirmed = weekStats['confirmed'] ?? 0;
-        state.weeklyTotal = weekStats['total'] ?? 0;
-        state.weeklyPercentage = weekStats['percentage'] ?? 0;
+        state.weeklyConfirmed = _asInt(weekStats['confirmed']);
+        state.weeklyTotal = _asInt(weekStats['total']);
+        state.weeklyPercentage = _asInt(weekStats['percentage']);
       }
       
       // Parse recent history
@@ -159,15 +163,22 @@ class HomeScreenState extends ChangeNotifier {
       state.isLoadingSession = false;
       if (session != null && session['hasActiveSession'] == true) {
         state.hasActiveSession = true;
-        state.activeClassName = session['className'];
-        state.activeTeacherName = session['teacherName'];
-        state.activeRoomName = session['roomId'];
+        state.activeClassName = session['className'] ?? session['class_name'];
+        state.activeTeacherName = session['teacherName'] ?? session['teacher_name'];
+        state.activeRoomName = session['roomId'] ?? session['room_id'];
       } else {
         state.hasActiveSession = false;
         state.activeClassName = null;
         state.activeTeacherName = null;
         state.activeRoomName = null;
       }
+    });
+  }
+
+  /// Update pending action badge count
+  void updatePendingActionsCount(int count) {
+    update((state) {
+      state.pendingActionCount = count;
     });
   }
 
@@ -285,5 +296,15 @@ class HomeScreenState extends ChangeNotifier {
     final minutes = remainingSeconds ~/ 60;
     final seconds = remainingSeconds % 60;
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  int _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is double) return value.round();
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+    return 0;
   }
 }

@@ -428,8 +428,8 @@ class BeaconService {
       String studentId, String classId) async {
     try {
       // Get beacon info for session lookup
-      final beaconMajor = 1; // Default major from ESP32 config
-      final beaconMinor = int.tryParse(classId) ?? 101;
+  const beaconMajor = 1; // Default major from ESP32 config
+  final beaconMinor = int.tryParse(classId) ?? 101;
 
       // Check for active session first (Session Activator integration)
       final session = await _sessionService.getActiveSession(

@@ -204,6 +204,8 @@ class HeroStatusCard extends StatelessWidget {
       case BeaconStatusType.failed:
       case BeaconStatusType.deviceLocked:
         return scheme.error;
+      case BeaconStatusType.noSession:
+        return scheme.outlineVariant;
     }
   }
 
@@ -228,6 +230,8 @@ class HeroStatusCard extends StatelessWidget {
         return Icons.lock_outline;
       case BeaconStatusType.info:
         return Icons.bluetooth_searching;
+      case BeaconStatusType.noSession:
+        return Icons.info_outline;
     }
   }
 
@@ -253,6 +257,8 @@ class HeroStatusCard extends StatelessWidget {
         return 'Device Locked';
       case BeaconStatusType.info:
         return 'Attendance Status';
+      case BeaconStatusType.noSession:
+        return 'No Active Session';
     }
   }
 }
