@@ -2,6 +2,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
 import 'package:logger/logger.dart';
+import 'package:crypto/crypto.dart';
 
 import '../constants/api_constants.dart';
 
@@ -76,22 +77,54 @@ class HttpService {
     }
   }
 
-  /// NEW: Check-in with device ID and RSSI
+  /// Generate HMAC signature for device verification
+  /// Uses the same algorithm as backend (SHA256 HMAC)
+  String _generateDeviceSignature(String deviceId) {
+    // Use the same salt as backend (.env DEVICE_HMAC_SALT_V1)
+    // In production, this should be securely stored
+    const salt = '64650144b7d4b235198e6b1ca6d3352a921022d311f14e06d45dc4667314155a';
+    final hmac = Hmac(sha256, utf8.encode(salt));
+    return hmac.convert(utf8.encode(deviceId)).toString();
+  }
+
+  /// Generate unique event ID for idempotency
+  String _generateEventId() {
+    return 'evt_${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch % 1000}';
+  }
+
+  /// Check-in with device ID, RSSI, and required security fields
   Future<Map<String, dynamic>> checkIn({
     required String studentId,
     required String classId,
     required String deviceId,
     required int rssi,
+    int? beaconMajor,
+    int? beaconMinor,
+    double? distance,
   }) async {
     try {
+      final eventId = _generateEventId();
+      final deviceSignature = _generateDeviceSignature(deviceId);
+      
+      final body = {
+        'studentId': studentId,
+        'classId': classId,
+        'deviceId': deviceId,
+        'deviceIdHash': deviceId, // Backend accepts both
+        'rssi': rssi,
+        'eventId': eventId,
+        'deviceSignature': deviceSignature,
+        'deviceSaltVersion': 'v1',
+      };
+      
+      // Add optional fields if provided
+      if (beaconMajor != null) body['beaconMajor'] = beaconMajor;
+      if (beaconMinor != null) body['beaconMinor'] = beaconMinor;
+      if (distance != null) body['distance'] = distance;
+      
       final response = await post(
         url: ApiConstants.checkIn,
-        body: {
-          'studentId': studentId,
-          'classId': classId,
-          'deviceId': deviceId,
-          'rssi': rssi,
-        },
+        body: body,
       );
 
       _logger.i('Check-in response: ${response.statusCode}');
@@ -103,6 +136,16 @@ class HttpService {
           'data': data,
           'attendanceId': data['attendance']?['id'] ?? data['attendance']?['_id'] ?? 'unknown',
           'status': data['attendance']?['status'] ?? 'provisional',
+          'remainingSeconds': data['remainingSeconds'] ?? 180,
+        };
+      } else if (response.statusCode == 401) {
+        // Invalid signature
+        final error = jsonDecode(response.body);
+        _logger.e('🔒 Invalid device signature!');
+        return {
+          'success': false,
+          'error': 'INVALID_DEVICE_SIGNATURE',
+          'message': error['message'] ?? 'Device verification failed',
         };
       } else if (response.statusCode == 403) {
         // Device mismatch - CRITICAL ERROR
@@ -131,8 +174,8 @@ class HttpService {
     }
   }
 
-  /// NEW: Confirm attendance (two-step)
-  /// Includes deviceId and optional attendanceId for backend integrity checks
+  /// Confirm attendance (two-step verification)
+  /// Includes deviceId, eventId, and deviceSignature for backend integrity checks
   /// Handles PROXY_DETECTED error when student is flagged for suspicious patterns
   Future<Map<String, dynamic>> confirmAttendance({
     required String studentId,
@@ -141,10 +184,17 @@ class HttpService {
     String? attendanceId,
   }) async {
     try {
+      final eventId = _generateEventId();
+      final deviceSignature = _generateDeviceSignature(deviceId);
+      
       final body = <String, dynamic>{
         'studentId': studentId,
         'classId': classId,
         'deviceId': deviceId,
+        'deviceIdHash': deviceId,
+        'eventId': eventId,
+        'deviceSignature': deviceSignature,
+        'deviceSaltVersion': 'v1',
       };
       if (attendanceId != null) {
         body['attendanceId'] = attendanceId;
@@ -160,6 +210,15 @@ class HttpService {
         return {
           'success': true,
           'data': data,
+        };
+      } else if (response.statusCode == 401) {
+        // Invalid signature
+        final error = jsonDecode(response.body);
+        _logger.e('🔒 Invalid device signature on confirm!');
+        return {
+          'success': false,
+          'error': 'INVALID_DEVICE_SIGNATURE',
+          'message': error['message'] ?? 'Device verification failed',
         };
       } else if (response.statusCode == 403) {
         // Check for PROXY_DETECTED or DEVICE_MISMATCH
@@ -208,20 +267,27 @@ class HttpService {
     }
   }
 
-  /// NEW: Cancel provisional attendance (student left before confirmation)
-  /// Includes deviceId for backend device-binding enforcement
+  /// Cancel provisional attendance (student left before confirmation)
+  /// Includes deviceId, eventId, and deviceSignature for backend verification
   Future<Map<String, dynamic>> cancelProvisionalAttendance({
     required String studentId,
     required String classId,
     required String deviceId,
   }) async {
     try {
+      final eventId = _generateEventId();
+      final deviceSignature = _generateDeviceSignature(deviceId);
+      
       final response = await post(
         url: ApiConstants.cancelProvisional,
         body: {
           'studentId': studentId,
           'classId': classId,
           'deviceId': deviceId,
+          'deviceIdHash': deviceId,
+          'eventId': eventId,
+          'deviceSignature': deviceSignature,
+          'deviceSaltVersion': 'v1',
         },
       );
 
@@ -236,6 +302,7 @@ class HttpService {
         return {
           'success': false,
           'error': error['error'] ?? 'Cancellation failed',
+          'message': error['message'] ?? 'Unknown error',
         };
       }
     } catch (e) {
