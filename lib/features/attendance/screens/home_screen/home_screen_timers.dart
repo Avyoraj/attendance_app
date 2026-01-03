@@ -91,18 +91,51 @@ class HomeScreenTimers {
             '⏱️ Persistent tick: ${s.remainingSeconds}s remaining',
             interval: LogConfig.timerInterval(),
           );
-        });
+        }, immediate: true);  // Use immediate for smooth countdown display
       } else {
         timer.cancel();
+        
+        // IMPORTANT: When timer reaches zero, show "Confirming..." state
+        // DO NOT show cancelled - wait for AttendanceConfirmationService callback
         state.update((s) {
           s.remainingSeconds = 0;
-          s.isAwaitingConfirmation = false; // UI no longer counting down
-        });
-        // Let AttendanceConfirmationService drive final state; we only reflect zero.
+          // Keep isAwaitingConfirmation true briefly while service confirms
+          // This prevents showing "cancelled" prematurely
+          s.beaconStatusType = BeaconStatusType.confirming;
+          s.beaconStatus = '🔄 Verifying attendance...\nPlease wait.';
+        }, immediate: true);
+        
         state.logger.info(
-            '🔔 Persistent timer reached zero (awaiting service confirmation result)');
-        // Clear persistent store to avoid negative values after delay
+            '🔔 Timer reached zero - showing "Confirming..." while awaiting service result');
+        
+        // Clear persistent store
         persistent.clear();
+        
+        // Set a safety timeout: if no callback received within 10 seconds,
+        // sync with backend to get actual state
+        Future.delayed(const Duration(seconds: 10), () {
+          // Only re-sync if still in "confirming" state (no callback received)
+          if (state.beaconStatusType == BeaconStatusType.confirming) {
+            state.logger.warning('⚠️ No confirmation callback after 10s - re-syncing with backend');
+            // Trigger a manual refresh to get actual state from backend
+            state.update((s) {
+              s.beaconStatus = '🔄 Syncing with server...';
+            });
+            // The sync will be triggered by the user's next refresh or we can trigger it here
+            // For now, just reset to scanning if still stuck
+            Future.delayed(const Duration(seconds: 5), () {
+              if (state.beaconStatusType == BeaconStatusType.confirming) {
+                state.logger.warning('⚠️ Still stuck in confirming state - resetting');
+                state.update((s) {
+                  s.beaconStatusType = BeaconStatusType.scanning;
+                  s.beaconStatus = '📡 Scanning for classroom beacon...';
+                  s.isAwaitingConfirmation = false;
+                  s.isCheckingIn = false;
+                }, immediate: true);
+              }
+            });
+          }
+        });
       }
     });
   }
@@ -129,10 +162,11 @@ class HomeScreenTimers {
 
   /// Cancel confirmation timer
   void cancelConfirmationTimer() {
+    // Cancel immediately to stop any countdown
+    state.confirmationTimer?.cancel();
     state.update((state) {
-      state.confirmationTimer?.cancel();
       state.confirmationTimer = null;
-    });
+    }, immediate: true);  // Use immediate to ensure UI updates right away
     // Also clear persistent timer state
     ConfirmationTimerService().clear();
     state.logger.debug('❌ Confirmation timer cancelled');

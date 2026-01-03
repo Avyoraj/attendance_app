@@ -35,12 +35,12 @@ class HomeScreenSync {
     required void Function(String message) showSnackBar,
   }) async {
     try {
-      // Show loading state
+      // Show loading state - use immediate for initial load
       state.update((state) {
         state.beaconStatusType = BeaconStatusType.confirming;
         state.beaconStatus = '🔄 Loading attendance state...';
         state.isCheckingIn = true;
-      });
+      }, immediate: true);
 
       state.logger.info('🔄 Syncing attendance state from backend...');
 
@@ -81,6 +81,10 @@ class HomeScreenSync {
               } else if (record['status'] == 'cancelled') {
                 await _handleCancelledSync(record);
                 break;
+              } else if (record['status'] == 'flagged') {
+                // Handle PROXY FLAGGED status - don't restart timer
+                await _handleFlaggedSync(record);
+                break;
               }
             }
           }
@@ -90,7 +94,7 @@ class HomeScreenSync {
             state.beaconStatusType = BeaconStatusType.scanning;
             state.isCheckingIn = false;
             state.beaconStatus = '📡 Scanning for classroom beacon...';
-          });
+          }, immediate: true);
         }
       } else {
         state.logger.warning('⚠️ State sync failed: ${syncResult['error']}');
@@ -98,7 +102,7 @@ class HomeScreenSync {
           state.beaconStatusType = BeaconStatusType.scanning;
           state.isCheckingIn = false;
           state.beaconStatus = '📡 Scanning for classroom beacon...';
-        });
+        }, immediate: true);
       }
       // Surface offline pending actions to the user
       await _refreshPendingActionsBadge(showSnackBar: showSnackBar);
@@ -108,7 +112,7 @@ class HomeScreenSync {
         state.beaconStatusType = BeaconStatusType.scanning;
         state.isCheckingIn = false;
         state.beaconStatus = '📡 Scanning for classroom beacon...';
-      });
+      }, immediate: true);
     }
   }
 
@@ -116,6 +120,16 @@ class HomeScreenSync {
   Future<void> _handleProvisionalSync(Map<String, dynamic> record,
       {required VoidCallback startConfirmationTimer,
       required void Function(String message) showSnackBar}) async {
+    
+    // DON'T restart timer if we're already in a terminal state (confirmed/success)
+    // This prevents timer restart after confirmation when sync returns stale data
+    if (state.beaconStatusType == BeaconStatusType.confirmed ||
+        state.beaconStatusType == BeaconStatusType.success ||
+        state.beaconStatusType == BeaconStatusType.cooldown) {
+      state.logger.debug('🔒 Skipping provisional sync - already in terminal state (${state.beaconStatusType})');
+      return;
+    }
+    
     final remainingSeconds = record['remainingSeconds'] as int? ?? 0;
     final classId = record['classId'] as String;
 
@@ -123,6 +137,7 @@ class HomeScreenSync {
       state.logger.info(
           '⏱️ Resuming provisional countdown: $remainingSeconds seconds for Class $classId');
 
+      // Use immediate for critical state restoration
       state.update((state) {
         state.beaconStatusType = BeaconStatusType.provisional;
         state.isAwaitingConfirmation = true;
@@ -130,7 +145,8 @@ class HomeScreenSync {
         state.currentClassId = classId;
         state.beaconStatus =
             '⏳ Check-in recorded for Class $classId!\n(Resumed) Stay in class to confirm attendance.';
-      });
+        state.isCheckingIn = false;
+      }, immediate: true);
 
       startConfirmationTimer();
       showSnackBar(
@@ -148,6 +164,7 @@ class HomeScreenSync {
     final classId = record['classId'] as String;
     state.logger.info('✅ Found confirmed attendance for Class $classId');
 
+    // Use immediate for critical state restoration
     state.update((state) {
       state.beaconStatusType = BeaconStatusType.cooldown;
       state.currentClassId = classId;
@@ -156,7 +173,7 @@ class HomeScreenSync {
       state.isAwaitingConfirmation = false;
       state.remainingSeconds = 0;
       state.isCheckingIn = false;
-    });
+    }, immediate: true);
 
     loadCooldownInfo();
   }
@@ -176,6 +193,7 @@ class HomeScreenSync {
       now: DateTime.now(),
     );
 
+    // Use immediate for critical state restoration
     state.update((state) {
       state.beaconStatusType = BeaconStatusType.cancelled;
       state.currentClassId = classId;
@@ -185,9 +203,39 @@ class HomeScreenSync {
       state.isAwaitingConfirmation = false;
       state.remainingSeconds = 0;
       state.isCheckingIn = false;
-    });
+    }, immediate: true);
 
     state.logger.info('🎓 Cancelled state loaded with schedule awareness');
+  }
+
+  /// Handle FLAGGED record from sync (proxy detection)
+  /// This prevents the timer from restarting when a student is flagged
+  Future<void> _handleFlaggedSync(
+    Map<String, dynamic> record,
+  ) async {
+    final classId = record['classId'] as String;
+    final reason = record['cancellation_reason'] ?? record['cancellationReason'] ?? 'Proxy pattern detected';
+    
+    state.logger.warning('🚫 Found FLAGGED attendance for Class $classId. Reason: $reason');
+
+    // Use immediate for critical state restoration
+    state.update((state) {
+      state.beaconStatusType = BeaconStatusType.failed;
+      state.currentClassId = classId;
+      state.beaconStatus =
+          '🚫 ATTENDANCE FLAGGED\n\n$reason\n\nPlease see your teacher for manual review.';
+      state.isAwaitingConfirmation = false;
+      state.remainingSeconds = 0;
+      state.isCheckingIn = false;
+    }, immediate: true);
+
+    // Show notification about flagged status
+    await NotificationService.showErrorNotification(
+      title: '🚫 Attendance Flagged',
+      message: 'Please see your teacher for review.',
+    );
+
+    state.logger.info('🚨 Flagged state loaded - needs teacher review');
   }
 
   /// Perform final RSSI check and confirm/cancel attendance
@@ -246,13 +294,14 @@ class HomeScreenSync {
   Future<void> _confirmAttendance() async {
     state.logger.info('✅ CONFIRMED: User is in range');
 
+    // Use immediate for critical state change
     state.update((state) {
       state.beaconStatusType = BeaconStatusType.confirmed;
       state.beaconStatus =
           '✅ Attendance CONFIRMED!\nYou stayed in the classroom.';
       state.isAwaitingConfirmation = false;
       state.remainingSeconds = 0;
-    });
+    }, immediate: true);
 
     if (state.currentClassId != null) {
       try {
@@ -288,6 +337,7 @@ class HomeScreenSync {
             final otherStudent = result['otherStudent'] ?? 'another student';
             state.logger.error('🚫 PROXY DETECTED: Blocked with $otherStudent');
             
+            // Use immediate for critical error state
             state.update((state) {
               state.beaconStatusType = BeaconStatusType.failed;
               state.beaconStatus = 
@@ -295,7 +345,7 @@ class HomeScreenSync {
               state.isAwaitingConfirmation = false;
               state.remainingSeconds = 0;
               state.isCheckingIn = false;
-            });
+            }, immediate: true);
             
             // Show blocking notification
             await NotificationService.showErrorNotification(
@@ -308,6 +358,7 @@ class HomeScreenSync {
             // Device binding violation
             state.logger.error('🔒 DEVICE MISMATCH: Wrong device');
             
+            // Use immediate for critical error state
             state.update((state) {
               state.beaconStatusType = BeaconStatusType.failed;
               state.beaconStatus = 
@@ -315,7 +366,7 @@ class HomeScreenSync {
               state.isAwaitingConfirmation = false;
               state.remainingSeconds = 0;
               state.isCheckingIn = false;
-            });
+            }, immediate: true);
             
             return; // Don't queue for retry
           }
@@ -355,6 +406,7 @@ class HomeScreenSync {
       now: cancelledTime,
     );
 
+    // Use immediate for critical state change
     state.update((state) {
       state.beaconStatusType = BeaconStatusType.cancelled;
       state.beaconStatus = '❌ Attendance Cancelled!\n$reason';
@@ -362,7 +414,7 @@ class HomeScreenSync {
       state.remainingSeconds = 0;
       state.isCheckingIn = false;
       state.cooldownInfo = cancelledInfo;
-    });
+    }, immediate: true);
 
     if (state.currentClassId != null) {
       await NotificationService.showCancelledNotification(
@@ -404,7 +456,9 @@ class HomeScreenSync {
   /// 
   /// Fetches today's status, weekly stats, and recent history
   /// Updates state asynchronously without blocking main sync
-  Future<void> _fetchStudentSummary() async {
+  /// 
+  /// Public method - can be called to refresh data after state changes
+  Future<void> fetchStudentSummary() async {
     try {
       state.logger.info('📊 Fetching student summary for $studentId...');
       
@@ -430,6 +484,9 @@ class HomeScreenSync {
       state.markSummaryLoaded(); // Mark as loaded even on error to stop skeleton
     }
   }
+  
+  // Keep private alias for internal use
+  Future<void> _fetchStudentSummary() => fetchStudentSummary();
 
   /// Refresh pending action count and notify user if any are queued
   Future<void> _refreshPendingActionsBadge({

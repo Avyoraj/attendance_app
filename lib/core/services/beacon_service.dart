@@ -410,6 +410,13 @@ class BeaconService {
 
   /// Start two-stage attendance process
   void _startTwoStageAttendance(String studentId, String classId) {
+    // Guard: Don't start if already in progress
+    if (_stateManager.currentState == 'provisional' || 
+        _stateManager.currentState == 'confirming') {
+      _logger.d('⏳ Attendance already in progress, skipping duplicate start');
+      return;
+    }
+    
     _logger.i('🎯 Starting attendance for $studentId in $classId');
 
     // Set cooldown
@@ -424,77 +431,99 @@ class BeaconService {
 
   /// Submit provisional check-in to backend
   /// First checks if there's an active session for the beacon
+  /// Includes retry logic for transient network failures
   Future<void> _submitProvisionalCheckIn(
       String studentId, String classId) async {
-    try {
-      // Get beacon info for session lookup
-  const beaconMajor = 1; // Default major from ESP32 config
-  final beaconMinor = int.tryParse(classId) ?? 101;
+    const maxRetries = 2;
+    int retryCount = 0;
+    
+    while (retryCount <= maxRetries) {
+      try {
+        // Get beacon info for session lookup
+    const beaconMajor = 1; // Default major from ESP32 config
+    final beaconMinor = int.tryParse(classId) ?? 101;
 
-      // Check for active session first (Session Activator integration)
-      final session = await _sessionService.getActiveSession(
-        beaconMajor: beaconMajor,
-        beaconMinor: beaconMinor,
-      );
+        // Check for active session first (Session Activator integration)
+        final session = await _sessionService.getActiveSession(
+          beaconMajor: beaconMajor,
+          beaconMinor: beaconMinor,
+        );
 
-      if (session == null) {
-        _logger.w('⚠️ No active session for beacon $beaconMajor:$beaconMinor');
-        _stateManager.setStateAndNotify('no_session', studentId, classId);
-        // Clear cooldown so student can retry when session starts
-        _cooldownManager.clearCooldown();
+        if (session == null) {
+          _logger.w('⚠️ No active session for beacon $beaconMajor:$beaconMinor');
+          _stateManager.setStateAndNotify('no_session', studentId, classId);
+          // Clear cooldown so student can retry when session starts
+          _cooldownManager.clearCooldown();
+          return;
+        }
+
+        // Use the class ID from the active session
+        final activeClassId = session['classId'] as String? ?? classId;
+        _logger.i('✅ Active session found: ${session['className']} (Class: $activeClassId)');
+
+        final deviceId = await _deviceIdService.getDeviceId();
+        final rssi = _rssiAnalyzer.currentRssi ?? -70;
+
+        _logger.i(
+            '📱 Submitting check-in: Student=$studentId, Class=$activeClassId, Device=$deviceId, RSSI=$rssi${retryCount > 0 ? " (retry $retryCount)" : ""}');
+
+        final result = await _httpService.checkIn(
+          studentId: studentId,
+          classId: activeClassId,
+          deviceId: deviceId,
+          rssi: rssi,
+        );
+
+        if (result['success'] == true) {
+          final attendanceId = result['attendanceId'];
+
+          _logger.i('✅ Check-in successful! ID: $attendanceId');
+
+          if (attendanceId != null && attendanceId != 'unknown') {
+            // Schedule confirmation
+            _confirmationService.scheduleConfirmation(
+              attendanceId: attendanceId,
+              studentId: studentId,
+              classId: activeClassId,
+              // New check-in: full delay, so no override
+            );
+
+            // Start RSSI streaming
+            _rssiStreamService.startStreaming(
+              studentId: studentId,
+              classId: activeClassId,
+              sessionDate: DateTime.now(),
+            );
+
+            _logger.i('📡 RSSI streaming started');
+          }
+          return; // Success - exit retry loop
+        } else if (result['error'] == 'DEVICE_MISMATCH') {
+          _logger.e('🔒 DEVICE MISMATCH: ${result['message']}');
+          _stateManager.setStateAndNotify('device_mismatch', studentId, classId);
+          return; // Don't retry device mismatch
+        } else if (result['error'] == 'NETWORK_ERROR' && retryCount < maxRetries) {
+          // Network error - retry after short delay
+          retryCount++;
+          _logger.w('⚠️ Network error, retrying in 1s... (attempt ${retryCount + 1}/${maxRetries + 1})');
+          await Future.delayed(const Duration(seconds: 1));
+          continue;
+        } else {
+          _logger.e('❌ Check-in failed: ${result['message']}');
+          _stateManager.setStateAndNotify('failed', studentId, classId);
+          return;
+        }
+      } catch (e) {
+        if (retryCount < maxRetries) {
+          retryCount++;
+          _logger.w('⚠️ Check-in error, retrying in 1s... (attempt ${retryCount + 1}/${maxRetries + 1}): $e');
+          await Future.delayed(const Duration(seconds: 1));
+          continue;
+        }
+        _logger.e('❌ Error submitting check-in after $maxRetries retries: $e');
+        _stateManager.setStateAndNotify('failed', studentId, classId);
         return;
       }
-
-      // Use the class ID from the active session
-      final activeClassId = session['classId'] as String? ?? classId;
-      _logger.i('✅ Active session found: ${session['className']} (Class: $activeClassId)');
-
-      final deviceId = await _deviceIdService.getDeviceId();
-      final rssi = _rssiAnalyzer.currentRssi ?? -70;
-
-      _logger.i(
-          '📱 Submitting check-in: Student=$studentId, Class=$activeClassId, Device=$deviceId, RSSI=$rssi');
-
-      final result = await _httpService.checkIn(
-        studentId: studentId,
-        classId: activeClassId,
-        deviceId: deviceId,
-        rssi: rssi,
-      );
-
-      if (result['success'] == true) {
-        final attendanceId = result['attendanceId'];
-
-        _logger.i('✅ Check-in successful! ID: $attendanceId');
-
-        if (attendanceId != null && attendanceId != 'unknown') {
-          // Schedule confirmation
-          _confirmationService.scheduleConfirmation(
-            attendanceId: attendanceId,
-            studentId: studentId,
-            classId: activeClassId,
-            // New check-in: full delay, so no override
-          );
-
-          // Start RSSI streaming
-          _rssiStreamService.startStreaming(
-            studentId: studentId,
-            classId: activeClassId,
-            sessionDate: DateTime.now(),
-          );
-
-          _logger.i('📡 RSSI streaming started');
-        }
-      } else if (result['error'] == 'DEVICE_MISMATCH') {
-        _logger.e('🔒 DEVICE MISMATCH: ${result['message']}');
-        _stateManager.setStateAndNotify('device_mismatch', studentId, classId);
-      } else {
-        _logger.e('❌ Check-in failed: ${result['message']}');
-        _stateManager.setStateAndNotify('failed', studentId, classId);
-      }
-    } catch (e) {
-      _logger.e('❌ Error submitting check-in: $e');
-      _stateManager.setStateAndNotify('failed', studentId, classId);
     }
   }
 

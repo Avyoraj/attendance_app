@@ -120,29 +120,47 @@ class HomeScreenState extends ChangeNotifier {
   }
 
   /// Update student summary data
+  /// Uses immediate update to ensure widgets refresh right away
+  /// 
+  /// IMPORTANT: Will NOT overwrite today's status if we're currently in
+  /// provisional/confirming/confirmed/success state - local state is more recent than backend.
   void updateSummary(Map<String, dynamic> summary) {
     update((state) {
       state.isLoadingSummary = false;
       state.studentSummary = summary;
       
-      // Parse today's status
-      final today = summary['today'] as Map<String, dynamic>?;
-      if (today != null) {
-        final attendance = today['attendance'] as List? ?? [];
-        if (attendance.isNotEmpty) {
-          final latest = attendance.first as Map<String, dynamic>;
-          state.todayStatus = latest['status'] ?? 'none';
-          state.todayClassName = latest['class_id'] ?? latest['classId'] ?? latest['class'] ?? latest['className'];
-          final rawCheckIn = latest['check_in_time'] ?? latest['checkInTime'];
-          state.todayCheckInTime = _formatTime(rawCheckIn);
-        } else {
-          state.todayStatus = 'none';
-          state.todayClassName = null;
-          state.todayCheckInTime = null;
+      // Check if we should preserve local today status
+      // If we're in provisional/confirmed state, local data is more recent than backend
+      final preserveLocalTodayStatus = 
+          state.beaconStatusType == BeaconStatusType.provisional ||
+          state.beaconStatusType == BeaconStatusType.confirming ||
+          state.beaconStatusType == BeaconStatusType.confirmed ||
+          state.beaconStatusType == BeaconStatusType.success;
+      
+      // Parse today's status (only if not preserving local)
+      if (!preserveLocalTodayStatus) {
+        final today = summary['today'] as Map<String, dynamic>?;
+        if (today != null) {
+          final attendance = today['attendance'] as List? ?? [];
+          if (attendance.isNotEmpty) {
+            final latest = attendance.first as Map<String, dynamic>;
+            state.todayStatus = latest['status'] ?? 'none';
+            // Format class name (e.g., "101" -> "CS101")
+            final rawClassName = latest['class_id'] ?? latest['classId'] ?? latest['class'] ?? latest['className'];
+            state.todayClassName = _formatClassName(rawClassName);
+            final rawCheckIn = latest['check_in_time'] ?? latest['checkInTime'];
+            state.todayCheckInTime = _formatTime(rawCheckIn);
+          } else {
+            state.todayStatus = 'none';
+            state.todayClassName = null;
+            state.todayCheckInTime = null;
+          }
         }
+      } else {
+        state.logger.debug('🔒 Preserving local today status (${state.beaconStatusType} state active)');
       }
       
-      // Parse weekly stats
+      // Parse weekly stats (always update)
       final weekStats = summary['weekStats'] as Map<String, dynamic>?;
       if (weekStats != null) {
         state.weeklyConfirmed = _asInt(weekStats['confirmed']);
@@ -150,11 +168,22 @@ class HomeScreenState extends ChangeNotifier {
         state.weeklyPercentage = _asInt(weekStats['percentage']);
       }
       
-      // Parse recent history
-      state.recentHistory = List<Map<String, dynamic>>.from(
-        summary['recentHistory'] ?? []
-      );
-    });
+      // Parse recent history (only if not preserving local)
+      // If we're in provisional/confirmed, local history has the latest entry
+      if (!preserveLocalTodayStatus) {
+        final rawHistory = List<Map<String, dynamic>>.from(
+          summary['recentHistory'] ?? []
+        );
+        // Format class names in history
+        state.recentHistory = rawHistory.map((entry) {
+          final rawClassName = entry['class_id'] ?? entry['classId'] ?? entry['className'];
+          return {
+            ...entry,
+            'className': _formatClassName(rawClassName) ?? rawClassName,
+          };
+        }).toList();
+      }
+    }, immediate: true); // Use immediate to refresh widgets right away
   }
 
   /// Update active session data
@@ -204,6 +233,17 @@ class HomeScreenState extends ChangeNotifier {
     } catch (e) {
       return null;
     }
+  }
+
+  /// Format class name (e.g., "101" -> "CS101")
+  String? _formatClassName(String? classId) {
+    if (classId == null) return null;
+    // If already has letters prefix, return as-is (uppercase)
+    if (RegExp(r'^[A-Za-z]').hasMatch(classId)) {
+      return classId.toUpperCase();
+    }
+    // Otherwise, add "CS" prefix
+    return 'CS$classId';
   }
 
   /// Apply updates and notify listeners with debouncing
@@ -283,6 +323,7 @@ class HomeScreenState extends ChangeNotifier {
       BeaconStatusType.success,
       BeaconStatusType.cancelled,
       BeaconStatusType.cooldown,
+      BeaconStatusType.failed, // Also lock when blocked (proxy/device mismatch)
     }.contains(beaconStatusType);
   }
 

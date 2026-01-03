@@ -92,6 +92,11 @@ class HomeScreenBeacon {
 
   /// Process beacon for check-in logic
   void _processBeaconForCheckIn(Beacon beacon, String classId) {
+    // Don't process if status is locked (failed/cancelled/confirmed etc)
+    if (state.isStatusLocked()) {
+      return;
+    }
+    
     // Use advanced beacon analysis
     final shouldCheckIn = state.beaconService.analyzeBeacon(
       beacon,

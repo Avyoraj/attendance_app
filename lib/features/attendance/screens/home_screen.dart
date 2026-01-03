@@ -93,6 +93,9 @@ class _HomeScreenState extends State<HomeScreen> {
       timers: _timers,
       helpers: _helpers,
     );
+    
+    // Wire up sync reference (to allow data refresh on state changes)
+    _callbacks.sync = _sync;
 
     // Create battery module (needs setState and showSnackBar)
     _battery = HomeScreenBattery(

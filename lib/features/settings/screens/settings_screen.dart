@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/settings_provider.dart';
+import '../../../core/config/environment.dart';
 
 /// Material 3 Settings Screen
 /// Follows Material 3 design principles with proper list design,
@@ -177,6 +178,49 @@ class SettingsScreen extends StatelessWidget {
                     color: colorScheme.onSurfaceVariant,
                     height: 1.4,
                   ),
+            ),
+            const SizedBox(height: 12),
+            // API URL indicator
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Environment.apiUrl.contains('192.168') || Environment.apiUrl.contains('localhost')
+                    ? colorScheme.tertiaryContainer.withOpacity(0.5)
+                    : colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Environment.apiUrl.contains('192.168') || Environment.apiUrl.contains('localhost')
+                      ? colorScheme.tertiary.withOpacity(0.3)
+                      : colorScheme.outline.withOpacity(0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Environment.apiUrl.contains('192.168') || Environment.apiUrl.contains('localhost')
+                        ? Icons.developer_mode
+                        : Icons.cloud,
+                    size: 16,
+                    color: Environment.apiUrl.contains('192.168') || Environment.apiUrl.contains('localhost')
+                        ? colorScheme.tertiary
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      Environment.apiUrl.contains('192.168') || Environment.apiUrl.contains('localhost')
+                          ? '🔧 LOCAL: ${Environment.apiUrl}'
+                          : '☁️ CLOUD: ${Environment.apiUrl}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontFamily: 'monospace',
+                            fontSize: 10,
+                          ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
